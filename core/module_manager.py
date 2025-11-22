@@ -266,7 +266,11 @@ class ModuleRegistry:
                 # Skip __init__.py, base files, and files beginning with underscore
                 if file_path.name.startswith("__") or file_path.name.startswith("_"):
                     continue
-                    
+
+                # Skip directories starting with underscore (e.g., _archive)
+                if any(part.startswith("_") for part in file_path.parts):
+                    continue
+
                 # Skip obvious utilities
                 if "utils" in file_path.name or "helpers" in file_path.name:
                     continue
