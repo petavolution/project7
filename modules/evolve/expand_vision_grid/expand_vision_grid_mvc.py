@@ -45,46 +45,37 @@ from modules.evolve.expand_vision_grid.expand_vision_grid_controller import Expa
 
 class ExpandVisionGrid(TrainingModule):
     """ExpandVision Grid Training Module - Enhances peripheral vision and numerical processing.
-    
+
     This class serves as the main entry point for the ExpandVision Grid training module.
-    It initializes the MVC components, handles the game loop, and provides 
+    It initializes the MVC components, handles the game loop, and provides
     the interface for interaction with the rest of the platform.
     """
-    
-    def __init__(self, screen_width: int = None, screen_height: int = None):
+
+    def __init__(self, difficulty=1):
         """Initialize the ExpandVision Grid training module.
-        
+
         Args:
-            screen_width: Width of the screen in pixels (optional)
-            screen_height: Height of the screen in pixels (optional)
+            difficulty: Initial difficulty level
         """
         super().__init__()
-        
+
         # Module metadata
         self.name = "expand_vision_grid"
         self.display_name = "Expand Vision Grid"
         self.description = "Focus gaze on center and calculate sum of numbers"
         self.category = "Visual Processing"
-        
-        # Use provided dimensions or get from parent class
-        if screen_width is None or screen_height is None:
-            screen_width = self.__class__.SCREEN_WIDTH
-            screen_height = self.__class__.SCREEN_HEIGHT
-        
+
+        # Screen dimensions from parent class
+        self.screen_width = self.__class__.SCREEN_WIDTH
+        self.screen_height = self.__class__.SCREEN_HEIGHT
+
         # Initialize MVC components
-        self.model = ExpandVisionGridModel(screen_width, screen_height)
+        self.model = ExpandVisionGridModel(self.screen_width, self.screen_height)
         self.view = ExpandVisionGridView(self.model)
         self.controller = ExpandVisionGridController(self.model, self.view)
-        
+
         # Game timer
         self.last_update_time = time.time()
-        
-        # Track properties for efficient delta generation
-        self._tracked_properties = self._tracked_properties.union({
-            'phase', 'preparation_complete', 'circle_width', 'circle_height',
-            'numbers', 'current_sum', 'user_answer', 'show_numbers', 'round',
-            'correct_answers', 'total_rounds', 'distance_factor_x', 'distance_factor_y'
-        })
     
     @staticmethod
     def get_name():
@@ -96,17 +87,38 @@ class ExpandVisionGrid(TrainingModule):
         """Get the description of the module."""
         return "Focus gaze on center and calculate sum of numbers"
     
-    def handle_click(self, x: int, y: int) -> Dict[str, Any]:
+    def handle_click(self, pos) -> Dict[str, Any]:
         """Handle mouse click events.
-        
+
         Args:
-            x: X coordinate of click
-            y: Y coordinate of click
-            
+            pos: (x, y) coordinates of click or x coordinate if two args
+
         Returns:
             Result dictionary
         """
+        # Handle both pos tuple and separate x,y args
+        if isinstance(pos, tuple):
+            x, y = pos
+        else:
+            x, y = pos, 0
         return self.controller.handle_click(x, y)
+
+    def render(self, renderer):
+        """Render the module using the provided renderer.
+
+        Args:
+            renderer: Renderer instance
+        """
+        # Update view dimensions
+        if hasattr(self.view, 'update_dimensions'):
+            self.view.update_dimensions(self.screen_width, self.screen_height)
+
+        # Render using the view's renderer abstraction
+        if hasattr(self.view, 'render_to_renderer'):
+            self.view.render_to_renderer(renderer, self.model)
+        else:
+            # Fallback to base class render
+            super().render(renderer)
     
     def update(self, dt: float) -> bool:
         """Update module state based on elapsed time.

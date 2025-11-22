@@ -2,172 +2,133 @@
 """
 Synesthetic Training MVC Module
 
-This module integrates the Model, View, and Controller components for the 
+This module integrates the Model, View, and Controller components for the
 Synesthetic Training module, which trains cross-modal sensory associations.
 """
 
 import sys
-import os
 import logging
 from pathlib import Path
-from typing import Dict, List, Tuple, Any, Optional
+from typing import Dict, Any
 
 # Ensure project root is in path for imports
 _project_root = Path(__file__).resolve().parent.parent.parent.parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
-# Import BaseModule - try multiple approaches
+# Import TrainingModule - try multiple approaches for robustness
 try:
-    from modules.base_module import BaseModule
+    from core.training_module import TrainingModule
 except ImportError:
     try:
-        from core.training_module import TrainingModule as BaseModule
+        from MetaMindIQTrain.core.training_module import TrainingModule
     except ImportError:
-        class BaseModule:
-            def __init__(self, config=None): pass
+        class TrainingModule:
+            SCREEN_WIDTH = 1024
+            SCREEN_HEIGHT = 768
+            def __init__(self): pass
 
 # Import local MVC components
 from modules.evolve.synesthetic_training.synesthetic_training_model import SynestheticTrainingModel
 from modules.evolve.synesthetic_training.synesthetic_training_view import SynestheticTrainingView
 from modules.evolve.synesthetic_training.synesthetic_training_controller import SynestheticTrainingController
 
-# Set up logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-class SynestheticTraining(BaseModule):
+class SynestheticTraining(TrainingModule):
     """Main Synesthetic Training module that integrates MVC components."""
-    
-    def __init__(self, config=None):
+
+    def __init__(self, difficulty=1):
         """Initialize Synesthetic Training module.
-        
+
         Args:
-            config: Optional configuration dictionary to override defaults
+            difficulty: Initial difficulty level
         """
-        super().__init__(config)
-        
+        super().__init__()
+
+        # Module metadata
+        self.name = "synesthetic_training"
+        self.display_name = "Synesthetic Training"
+        self.description = "Cross-modal sensory association training"
+        self.category = "Cross-Modal"
+
+        # Screen dimensions from parent class
+        self.screen_width = self.__class__.SCREEN_WIDTH
+        self.screen_height = self.__class__.SCREEN_HEIGHT
+
         # Initialize MVC components
         self.model = SynestheticTrainingModel()
         self.view = SynestheticTrainingView(self.model)
         self.controller = SynestheticTrainingController(self.model, self.view)
-        
-        # Apply custom configuration if provided
-        if config:
-            self.configure(config)
-            
-        # Initialize the game
-        self.init_game()
-    
-    def configure(self, config):
-        """Configure the module with custom settings.
-        
+
+        # Set view dimensions
+        if hasattr(self.view, 'set_dimensions'):
+            self.view.set_dimensions(self.screen_width, self.screen_height)
+
+    def handle_click(self, pos):
+        """Handle a mouse click event.
+
         Args:
-            config: Configuration dictionary
-        """
-        # Apply configuration to model
-        if hasattr(self.model, 'configure'):
-            self.model.configure(config)
-            
-        # Apply view configuration if present
-        if 'screen_width' in config and 'screen_height' in config:
-            self.view.set_dimensions(config['screen_width'], config['screen_height'])
-    
-    def init_game(self):
-        """Initialize the game state."""
-        self.model.init_game()
-        self.controller.reset()
-    
-    def get_component_tree(self):
-        """Get the UI component tree.
-        
+            pos: (x, y) coordinates of click
+
         Returns:
-            Dictionary containing the component tree
+            Result dictionary from controller
         """
-        return self.view.build_component_tree()
-    
+        if hasattr(self.controller, 'handle_click'):
+            return self.controller.handle_click(pos)
+        elif hasattr(self.controller, 'handle_input'):
+            return self.controller.handle_input({'type': 'click', 'pos': pos})
+        return {}
+
     def update(self, delta_time):
         """Update the module state.
-        
+
         Args:
             delta_time: Time delta in seconds
-            
-        Returns:
-            Dictionary containing update status
         """
-        # Update controller (which updates model)
-        self.controller.update(delta_time)
-        
-        # Return current game state
-        return self.get_state()
-    
-    def handle_input(self, input_data):
-        """Handle user input.
-        
+        if hasattr(self.controller, 'update'):
+            self.controller.update(delta_time)
+
+    def render(self, renderer):
+        """Render the module using the provided renderer.
+
         Args:
-            input_data: Dictionary containing input data
-            
-        Returns:
-            Dictionary containing the response
+            renderer: Renderer instance
         """
-        # Let controller handle input
-        response = self.controller.handle_input(input_data)
-        
-        # Update component tree if state changed
-        if response.get("result") != "ignored":
-            # Return updated component tree
-            response["component_tree"] = self.get_component_tree()
-        
-        return response
-    
-    def get_state(self):
+        # Update view dimensions
+        if hasattr(self.view, 'set_dimensions'):
+            self.view.set_dimensions(self.screen_width, self.screen_height)
+
+        # Render using the view's renderer abstraction
+        if hasattr(self.view, 'render_to_renderer'):
+            self.view.render_to_renderer(renderer, self.model)
+        else:
+            # Fallback to base class render
+            super().render(renderer)
+
+    def get_state(self) -> Dict[str, Any]:
         """Get the current state of the module.
-        
+
         Returns:
             Dictionary containing current state information
         """
-        return self.controller.get_state()
-    
+        if hasattr(self.controller, 'get_state'):
+            return self.controller.get_state()
+        return {'score': self.score, 'level': self.level}
+
     def reset(self):
         """Reset the module state."""
-        self.controller.reset()
-    
-    def get_default_config(self):
-        """Get the default configuration.
-        
-        Returns:
-            Dictionary containing default configuration
-        """
-        return self.model.get_default_config()
-    
-    @classmethod
-    def get_module_name(cls):
-        """Get the module name.
-        
-        Returns:
-            String containing the module name
-        """
-        return "Synesthetic Training"
-    
-    @classmethod
-    def get_module_description(cls):
-        """Get the module description.
-        
-        Returns:
-            String containing the module description
-        """
-        return (
-            "Trains cross-modal sensory associations through pattern recognition "
-            "between different sensory inputs (visual, auditory, spatial, numeric). "
-            "Enhances perceptual binding and multisensory integration capabilities."
-        )
+        super().reset()
+        if hasattr(self.controller, 'reset'):
+            self.controller.reset()
 
+    def build_component_tree(self) -> Dict[str, Any]:
+        """Build the UI component tree.
 
-# If run directly, create and run the module
-if __name__ == "__main__":
-    # Simple test
-    module = SynestheticTraining()
-    state = module.get_state()
-    print(f"Module initialized with state: {state}")
-    print(f"Component tree: {module.get_component_tree()}") 
+        Returns:
+            Dictionary containing the component tree
+        """
+        if hasattr(self.view, 'build_component_tree'):
+            return self.view.build_component_tree()
+        return {} 

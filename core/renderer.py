@@ -69,16 +69,17 @@ class RenderBackend(ABC):
         pass
         
     @abstractmethod
-    def draw_rectangle(self, x: int, y: int, width: int, height: int, 
-                      color: Tuple[int, int, int, int]) -> None:
-        """Draw a filled rectangle.
-        
+    def draw_rectangle(self, x: int, y: int, width: int, height: int,
+                      color: Tuple[int, int, int, int], filled: bool = True) -> None:
+        """Draw a rectangle.
+
         Args:
             x: X coordinate
             y: Y coordinate
             width: Rectangle width
             height: Rectangle height
             color: Fill color (RGBA)
+            filled: Whether to fill the rectangle (default True)
         """
         pass
         
@@ -321,24 +322,28 @@ class PygameBackend(RenderBackend):
         
         return events
 
-    def draw_rectangle(self, x: int, y: int, width: int, height: int, 
-                      color: Tuple[int, int, int, int]) -> None:
-        """Draw a filled rectangle with alpha support."""
+    def draw_rectangle(self, x: int, y: int, width: int, height: int,
+                      color: Tuple[int, int, int, int], filled: bool = True) -> None:
+        """Draw a rectangle with alpha support."""
         if not self.initialized:
             return
-            
+
         import pygame
-        
-        # Handle alpha channel properly
-        if len(color) > 3 and color[3] < 255:
-            # Create a surface with per-pixel alpha
-            surface = pygame.Surface((width, height), pygame.SRCALPHA)
-            surface.fill(color)
-            self.screen.blit(surface, (x, y))
+
+        if filled:
+            # Handle alpha channel properly
+            if len(color) > 3 and color[3] < 255:
+                # Create a surface with per-pixel alpha
+                surface = pygame.Surface((width, height), pygame.SRCALPHA)
+                surface.fill(color)
+                self.screen.blit(surface, (x, y))
+            else:
+                # Use the faster draw.rect for opaque rectangles
+                pygame.draw.rect(self.screen, color[:3], (x, y, width, height))
         else:
-            # Use the faster draw.rect for opaque rectangles
-            pygame.draw.rect(self.screen, color[:3], (x, y, width, height))
-        
+            # Draw outline only
+            pygame.draw.rect(self.screen, color[:3], (x, y, width, height), 1)
+
         self.render_stats["draw_calls"] += 1
     
     def draw_rounded_rectangle(self, x: int, y: int, width: int, height: int,
@@ -595,9 +600,9 @@ class WebGLBackend(RenderBackend):
         """Process input events."""
         return []
         
-    def draw_rectangle(self, x: int, y: int, width: int, height: int, 
-                      color: Tuple[int, int, int, int]) -> None:
-        """Draw a filled rectangle."""
+    def draw_rectangle(self, x: int, y: int, width: int, height: int,
+                      color: Tuple[int, int, int, int], filled: bool = True) -> None:
+        """Draw a rectangle."""
         pass
         
     def draw_rounded_rectangle(self, x: int, y: int, width: int, height: int,
@@ -687,8 +692,8 @@ class HeadlessBackend(RenderBackend):
         """Process events (returns empty list in headless mode)."""
         return []
         
-    def draw_rectangle(self, x: int, y: int, width: int, height: int, 
-                      color: Tuple[int, int, int, int]) -> None:
+    def draw_rectangle(self, x: int, y: int, width: int, height: int,
+                      color: Tuple[int, int, int, int], filled: bool = True) -> None:
         """Record a rectangle drawing in headless mode."""
         self.rendered_elements.append({
             'type': 'rectangle',
@@ -696,7 +701,8 @@ class HeadlessBackend(RenderBackend):
             'y': y,
             'width': width,
             'height': height,
-            'color': color
+            'color': color,
+            'filled': filled
         })
         
     def draw_rounded_rectangle(self, x: int, y: int, width: int, height: int,
@@ -961,11 +967,11 @@ class Renderer:
         
     # Forward drawing methods to the active backend
     
-    def draw_rectangle(self, x: int, y: int, width: int, height: int, 
-                      color: Tuple[int, int, int, int]) -> None:
-        """Draw a filled rectangle."""
+    def draw_rectangle(self, x: int, y: int, width: int, height: int,
+                      color: Tuple[int, int, int, int], filled: bool = True) -> None:
+        """Draw a rectangle."""
         if self.backend:
-            self.backend.draw_rectangle(x, y, width, height, color)
+            self.backend.draw_rectangle(x, y, width, height, color, filled)
             
     def draw_rounded_rectangle(self, x: int, y: int, width: int, height: int,
                               color: Tuple[int, int, int, int], radius: int = 5,

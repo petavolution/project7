@@ -50,7 +50,7 @@ except ImportError:
     except ImportError:
         # Minimal fallback config
         class config:
-            UI_THEME = {"colors": {}, "layouts": {"neural_flow": {"node_radius": 2, "node_padding": 3}}}
+            UI_THEME = {"colors": {}, "layouts": {"neural_flow": {"node_radius": 2, "node_padding": 3, "path_thickness": 1}}}
             MODULE_SETTINGS = {"neural_flow": {"visual_scale": 1.0}}
 
 

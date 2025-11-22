@@ -58,7 +58,9 @@ class NeuralFlow(TrainingModule):
         self.screen_height = self.__class__.SCREEN_HEIGHT
 
         # Initialize MVC components
-        self.model = NeuralFlowModel(self.screen_width, self.screen_height)
+        self.model = NeuralFlowModel()
+        self.model.screen_width = self.screen_width
+        self.model.screen_height = self.screen_height
         self.view = NeuralFlowView(self.model)
         self.controller = NeuralFlowController(self.model, self.view)
 

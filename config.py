@@ -107,6 +107,16 @@ UI_THEME = {
         "expand_vision": {
             "grid_margin": 5,
             "grid_padding": 2,
+        },
+        "neural_flow": {
+            "node_radius": 2,
+            "node_padding": 3,
+            "path_thickness": 1,
+        },
+        "neural_synthesis": {
+            "grid_margin": 5,
+            "grid_padding": 2,
+            "cell_margin": 1,
         }
     }
 }
