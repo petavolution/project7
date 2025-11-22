@@ -3,7 +3,7 @@
 MorphMatrix Training Module with MVC Architecture
 
 This module provides a pattern recognition game that challenges users to identify
-rotated versions of a pattern versus modified versions. It implements the 
+rotated versions of a pattern versus modified versions. It implements the
 Model-View-Controller architecture by integrating separate components.
 
 Key features:
@@ -17,20 +17,25 @@ import sys
 from pathlib import Path
 from typing import Dict, Any, Optional
 
-# Add the parent directory to sys.path for absolute imports when imported directly
-if __name__ == "__main__" or not __package__:
-    project_root = Path(__file__).parent.parent.parent.parent
-    sys.path.insert(0, str(project_root))
-    from MetaMindIQTrain.core.training_module import TrainingModule
-    from MetaMindIQTrain.modules.evolve.morph_matrix.morph_matrix_model import MorphMatrixModel
-    from MetaMindIQTrain.modules.evolve.morph_matrix.morph_matrix_view import MorphMatrixView
-    from MetaMindIQTrain.modules.evolve.morph_matrix.morph_matrix_controller import MorphMatrixController
-else:
-    # Use relative imports when imported as a module
-    from ....core.training_module import TrainingModule
-    from .morph_matrix_model import MorphMatrixModel
-    from .morph_matrix_view import MorphMatrixView
-    from .morph_matrix_controller import MorphMatrixController
+# Ensure project root is in path for imports
+_project_root = Path(__file__).resolve().parent.parent.parent.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
+
+# Import TrainingModule - try multiple approaches for robustness
+try:
+    from core.training_module import TrainingModule
+except ImportError:
+    try:
+        from MetaMindIQTrain.core.training_module import TrainingModule
+    except ImportError:
+        class TrainingModule:
+            def __init__(self): pass
+
+# Import local MVC components
+from modules.evolve.morph_matrix.morph_matrix_model import MorphMatrixModel
+from modules.evolve.morph_matrix.morph_matrix_view import MorphMatrixView
+from modules.evolve.morph_matrix.morph_matrix_controller import MorphMatrixController
 
 
 class MorphMatrix(TrainingModule):

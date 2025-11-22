@@ -19,20 +19,26 @@ import sys
 from pathlib import Path
 from typing import Dict, Any, Optional
 
-# Add the parent directory to sys.path for absolute imports when imported directly
-if __name__ == "__main__" or not __package__:
-    project_root = Path(__file__).parent.parent.parent.parent
-    sys.path.insert(0, str(project_root))
-    from MetaMindIQTrain.core.training_module import TrainingModule
-    from MetaMindIQTrain.modules.evolve.symbol_memory.symbol_memory_model import SymbolMemoryModel
-    from MetaMindIQTrain.modules.evolve.symbol_memory.symbol_memory_view import SymbolMemoryView
-    from MetaMindIQTrain.modules.evolve.symbol_memory.symbol_memory_controller import SymbolMemoryController
-else:
-    # Use relative imports when imported as a module
-    from ....core.training_module import TrainingModule
-    from .symbol_memory_model import SymbolMemoryModel
-    from .symbol_memory_view import SymbolMemoryView
-    from .symbol_memory_controller import SymbolMemoryController
+# Ensure project root is in path for imports
+_project_root = Path(__file__).resolve().parent.parent.parent.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
+
+# Import TrainingModule - try multiple approaches for robustness
+try:
+    from core.training_module import TrainingModule
+except ImportError:
+    try:
+        from MetaMindIQTrain.core.training_module import TrainingModule
+    except ImportError:
+        # Minimal fallback
+        class TrainingModule:
+            def __init__(self): pass
+
+# Import local MVC components
+from modules.evolve.symbol_memory.symbol_memory_model import SymbolMemoryModel
+from modules.evolve.symbol_memory.symbol_memory_view import SymbolMemoryView
+from modules.evolve.symbol_memory.symbol_memory_controller import SymbolMemoryController
 
 
 class SymbolMemory(TrainingModule):

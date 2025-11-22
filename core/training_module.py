@@ -10,11 +10,52 @@ import json
 import logging
 import time
 import uuid
+import sys
+import os
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional, Tuple, Set
+from pathlib import Path
 
-from ..config import SCREEN_WIDTH, SCREEN_HEIGHT, calculate_sizes
-from .components import UI, Component, get_component_stats
+# Ensure project root is in path for imports
+_project_root = Path(__file__).resolve().parent.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
+
+# Import config - try multiple approaches for robustness
+try:
+    from config import SCREEN_WIDTH, SCREEN_HEIGHT, calculate_sizes
+except ImportError:
+    try:
+        from ..config import SCREEN_WIDTH, SCREEN_HEIGHT, calculate_sizes
+    except ImportError:
+        # Fallback defaults if config unavailable
+        SCREEN_WIDTH = 1440
+        SCREEN_HEIGHT = 1024
+        def calculate_sizes(width, height):
+            return {
+                'SCREEN_WIDTH': width,
+                'SCREEN_HEIGHT': height,
+                'UI_HEADER_HEIGHT': int(height * 0.15),
+                'UI_FOOTER_HEIGHT': int(height * 0.12),
+                'UI_CONTENT_HEIGHT': int(height * 0.73),
+            }
+
+# Import components - try multiple approaches
+try:
+    from core.components import UI, Component, get_component_stats
+except ImportError:
+    try:
+        from .components import UI, Component, get_component_stats
+    except ImportError:
+        # Minimal fallback if components unavailable
+        class UI:
+            def __init__(self): self.components = []
+            def clear(self): self.components = []
+            def add_component(self, c): self.components.append(c)
+            def to_dict(self): return {'components': self.components}
+            def text(self, **kwargs): return kwargs
+        class Component: pass
+        def get_component_stats(): return {}
 
 # Set up logging
 logging.basicConfig(level=logging.INFO,
@@ -547,15 +588,21 @@ available_modules = {}
 
 def get_available_modules() -> Dict[str, type]:
     """Get available training modules.
-    
+
     Returns:
         Dictionary of available modules
     """
-    # Import modules here to avoid circular imports
-    from MetaMindIQTrain.modules.test_module import TestTrainingModule
-    
-    modules = {
-        'test_module': TestTrainingModule
-    }
-    
+    modules = {}
+
+    # Try to import test module - multiple import paths for robustness
+    try:
+        from modules.test_module import TestTrainingModule
+        modules['test_module'] = TestTrainingModule
+    except ImportError:
+        try:
+            from MetaMindIQTrain.modules.test_module import TestTrainingModule
+            modules['test_module'] = TestTrainingModule
+        except ImportError:
+            pass  # Module not available
+
     return modules 
