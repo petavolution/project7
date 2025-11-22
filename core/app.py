@@ -348,44 +348,78 @@ class Application:
         if not self.renderer:
             logger.error("Renderer not initialized")
             return
-            
+
         self.running = True
         self.last_frame_time = time.time()
-        
+
         logger.info("Starting main loop")
-        
-        # Main loop
+
+        # Main loop with error handling
+        error_count = 0
+        max_consecutive_errors = 10
+
         while self.running and self.renderer.is_running():
-            # Calculate delta time
-            current_time = time.time()
-            delta_time = current_time - self.last_frame_time
-            
-            # Process events
-            self._process_events()
-            
-            # Update active module
-            if self.active_module_id:
-                # Try to get the module and call update() directly
-                module = self.module_registry.loaded_modules.get(self.active_module_id)
-                if module:
-                    if hasattr(module, 'update') and callable(module.update):
-                        module.update(delta_time)
-                    else:
-                        self.module_registry.update_module(self.active_module_id, delta_time)
-                
-            # Render
-            self._render()
-            
-            # Cap frame rate
-            elapsed = time.time() - current_time
-            if elapsed < self.frame_time:
-                time.sleep(self.frame_time - elapsed)
-                
-            # Update frame time
-            self.last_frame_time = current_time
-            self.frame_count += 1
-            
-        logger.info("Main loop ended")
+            try:
+                # Calculate delta time
+                current_time = time.time()
+                delta_time = current_time - self.last_frame_time
+
+                # Cap delta time to prevent physics issues after long pauses
+                delta_time = min(delta_time, 0.1)
+
+                # Process events
+                self._process_events()
+
+                # Update active module
+                if self.active_module_id:
+                    try:
+                        module = self.module_registry.loaded_modules.get(self.active_module_id)
+                        if module:
+                            if hasattr(module, 'update') and callable(module.update):
+                                module.update(delta_time)
+                            else:
+                                self.module_registry.update_module(self.active_module_id, delta_time)
+                    except Exception as e:
+                        logger.error(f"Error updating module {self.active_module_id}: {e}")
+                        # Don't crash - continue to render
+
+                # Render
+                try:
+                    self._render()
+                except Exception as e:
+                    logger.error(f"Error rendering: {e}")
+                    # Try to at least clear and present to avoid frozen screen
+                    try:
+                        self.renderer.clear(self.background_color)
+                        self.renderer.present()
+                    except:
+                        pass
+
+                # Cap frame rate
+                elapsed = time.time() - current_time
+                if elapsed < self.frame_time:
+                    time.sleep(self.frame_time - elapsed)
+
+                # Update frame time
+                self.last_frame_time = current_time
+                self.frame_count += 1
+
+                # Reset error count on successful frame
+                error_count = 0
+
+            except Exception as e:
+                error_count += 1
+                logger.error(f"Error in main loop (frame {self.frame_count}): {e}")
+
+                if error_count >= max_consecutive_errors:
+                    logger.critical(f"Too many consecutive errors ({error_count}), stopping main loop")
+                    self.running = False
+                    break
+
+                # Try to recover by sleeping briefly
+                time.sleep(0.1)
+
+        logger.info(f"Main loop ended after {self.frame_count} frames")
         
     def _process_events(self):
         """Process events from the renderer."""
