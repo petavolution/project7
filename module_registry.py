@@ -136,11 +136,14 @@ def register_module_type(module_type: str, loader: Any) -> bool:
 
 def configure_modules_display(width: int, height: int):
     """Configure display settings for all modules.
-    
+
     Args:
         width: Screen width
         height: Screen height
     """
+    if TrainingModule is None:
+        logger.error("TrainingModule not available - cannot configure display")
+        return
     TrainingModule.configure_display(width, height)
     logger.info(f"Configured display settings for all modules: {width}x{height}")
 

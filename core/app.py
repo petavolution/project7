@@ -290,39 +290,56 @@ class Application:
         
     def unload_module(self, module_id: str) -> bool:
         """Unload a module.
-        
+
         Args:
             module_id: Module ID
-            
+
         Returns:
             True if the module was unloaded successfully, False otherwise
         """
         # Stop the module if it's active
         if self.active_module_id == module_id:
             self.stop_module(module_id)
-            
-        # Unload the module
-        if not self.module_registry.unload_module(module_id):
-            logger.error(f"Failed to unload module: {module_id}")
-            return False
-            
+
+        # Try to unload from registry first, but don't fail if it's not there
+        unloaded = False
+        if hasattr(self.module_registry, 'unload_module'):
+            unloaded = self.module_registry.unload_module(module_id)
+
+        # Also remove from loaded_modules if present (may have been loaded via module_registry.py)
+        if module_id in self.module_registry.loaded_modules:
+            del self.module_registry.loaded_modules[module_id]
+            unloaded = True
+
+        if not unloaded:
+            logger.warning(f"Module {module_id} was not in registry or loaded_modules")
+
         logger.info(f"Unloaded module: {module_id}")
         return True
         
     def reset_module(self, module_id: str) -> bool:
         """Reset a module.
-        
+
         Args:
             module_id: Module ID
-            
+
         Returns:
             True if the module was reset successfully, False otherwise
         """
-        # Reset the module
-        if not self.module_registry.reset_module(module_id):
-            logger.error(f"Failed to reset module: {module_id}")
-            return False
-            
+        # Reset the module - check if method exists first
+        if hasattr(self.module_registry, 'reset_module'):
+            if not self.module_registry.reset_module(module_id):
+                logger.error(f"Failed to reset module: {module_id}")
+                return False
+        else:
+            # Fallback: get module and call reset() directly
+            module = self.module_registry.loaded_modules.get(module_id)
+            if module and hasattr(module, 'reset'):
+                module.reset()
+            else:
+                logger.error(f"Cannot reset module: {module_id}")
+                return False
+
         logger.info(f"Reset module: {module_id}")
         return True
         
@@ -464,25 +481,41 @@ class Application:
         
     def get_module_info(self, module_id: str) -> Optional[Dict[str, Any]]:
         """Get information about a module.
-        
+
         Args:
             module_id: Module ID
-            
+
         Returns:
             Dictionary containing module information or None if not found
         """
-        return self.module_registry.get_module_info(module_id)
-        
+        if hasattr(self.module_registry, 'get_module_info'):
+            return self.module_registry.get_module_info(module_id)
+        # Fallback: check if module exists in loaded_modules
+        module = self.module_registry.loaded_modules.get(module_id)
+        if module:
+            return {
+                'id': module_id,
+                'name': getattr(module, 'name', module_id),
+                'description': getattr(module, 'description', ''),
+            }
+        return None
+
     def get_module_state(self, module_id: str) -> Optional[Dict[str, Any]]:
         """Get the state of a module.
-        
+
         Args:
             module_id: Module ID
-            
+
         Returns:
             Dictionary containing the module state or None if not found
         """
-        return self.module_registry.get_module_state(module_id)
+        if hasattr(self.module_registry, 'get_module_state'):
+            return self.module_registry.get_module_state(module_id)
+        # Fallback: get module and call get_state() directly
+        module = self.module_registry.loaded_modules.get(module_id)
+        if module and hasattr(module, 'get_state'):
+            return module.get_state()
+        return None
         
     def list_modules(self, category: Optional[str] = None) -> List[Dict[str, Any]]:
         """List available modules.

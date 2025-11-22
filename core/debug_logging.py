@@ -14,8 +14,8 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional
 
-# Get project root
-PROJECT_ROOT = Path(__file__).resolve().parent
+# Get project root (parent of core/ directory)
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEBUG_LOG_FILE = PROJECT_ROOT / "debug-log.txt"
 
 

@@ -229,6 +229,154 @@ def test_performance_monitor():
 
 
 # ============================================================================
+# Renderer Tests
+# ============================================================================
+
+def test_headless_renderer_init():
+    """Test headless renderer initialization."""
+    from core.renderer import Renderer, HeadlessBackend
+
+    renderer = Renderer()
+    success = renderer.initialize(800, 600, backend="headless", title="Test")
+    assert success, "Headless renderer should initialize successfully"
+    assert renderer.backend is not None, "Backend should be set"
+    assert renderer.backend_name == "headless", "Backend should be headless"
+    assert renderer.get_size() == (800, 600), "Size should be 800x600"
+    renderer.shutdown()
+    test_logger.info("  Headless renderer initialized and shutdown successfully")
+
+
+def test_renderer_draw_operations():
+    """Test renderer draw operations in headless mode."""
+    from core.renderer import Renderer
+
+    renderer = Renderer()
+    renderer.initialize(800, 600, backend="headless")
+
+    # Test all draw operations
+    renderer.clear((0, 0, 0, 255))
+    renderer.draw_rectangle(10, 10, 100, 50, (255, 0, 0, 255))
+    renderer.draw_rounded_rectangle(20, 20, 80, 40, (0, 255, 0, 255), radius=5)
+    renderer.draw_circle(100, 100, 30, (0, 0, 255, 255))
+    renderer.draw_line(0, 0, 100, 100, (255, 255, 255, 255), thickness=2)
+    renderer.draw_text(50, 50, "Test", font_size=16, color=(255, 255, 255, 255))
+    renderer.present()
+
+    # Check rendered elements were recorded
+    elements = renderer.backend.get_rendered_elements()
+    assert len(elements) > 0, "Should have rendered elements"
+
+    # Find specific element types
+    types = [e['type'] for e in elements]
+    assert 'clear' in types, "Should have clear operation"
+    assert 'rectangle' in types, "Should have rectangle operation"
+    assert 'circle' in types, "Should have circle operation"
+    assert 'present' in types, "Should have present operation"
+
+    renderer.shutdown()
+    test_logger.info(f"  Rendered {len(elements)} elements successfully")
+
+
+# ============================================================================
+# Application Lifecycle Tests
+# ============================================================================
+
+def test_app_initialization():
+    """Test application initialization in headless mode."""
+    from core.app import Application
+
+    app = Application()
+    success = app.initialize(800, 600, "Test App", backend="headless")
+    assert success, "App should initialize successfully"
+    assert app.renderer is not None, "Renderer should be set"
+    assert app.renderer.backend_name == "headless", "Backend should be headless"
+    app.shutdown()
+    test_logger.info("  Application initialized and shutdown successfully")
+
+
+def test_app_module_lifecycle():
+    """Test application module load/start/stop/unload cycle."""
+    from core.app import Application
+    from module_registry import AVAILABLE_MODULES
+
+    if not AVAILABLE_MODULES:
+        test_logger.warning("  No modules available")
+        return
+
+    app = Application()
+    app.initialize(800, 600, "Test App", backend="headless")
+
+    # Try first available module
+    mod_id = AVAILABLE_MODULES[0]['id']
+
+    # Load module
+    loaded = app.load_module(mod_id)
+    assert loaded, f"Should load module {mod_id}"
+    assert mod_id in app.module_registry.loaded_modules, "Module should be in loaded_modules"
+
+    # Start module
+    started = app.start_module(mod_id)
+    assert started, f"Should start module {mod_id}"
+    assert app.active_module_id == mod_id, "Module should be active"
+
+    # Stop module
+    stopped = app.stop_module(mod_id)
+    assert stopped, f"Should stop module {mod_id}"
+    assert app.active_module_id is None, "No module should be active"
+
+    # Unload module
+    unloaded = app.unload_module(mod_id)
+    assert unloaded, f"Should unload module {mod_id}"
+
+    app.shutdown()
+    test_logger.info(f"  Module lifecycle test passed for {mod_id}")
+
+
+# ============================================================================
+# Module Rendering Tests
+# ============================================================================
+
+def test_module_render_pipeline():
+    """Test module rendering through the full pipeline."""
+    from core.app import Application
+    from module_registry import AVAILABLE_MODULES
+
+    if not AVAILABLE_MODULES:
+        test_logger.warning("  No modules available")
+        return
+
+    app = Application()
+    app.initialize(800, 600, "Test App", backend="headless")
+
+    # Test each module's render capability
+    rendered_count = 0
+    failed = []
+
+    for mod_info in AVAILABLE_MODULES:
+        mod_id = mod_info['id']
+        try:
+            if app.load_module(mod_id) and app.start_module(mod_id):
+                # Simulate one frame
+                app.renderer.clear(app.background_color)
+                module = app.module_registry.loaded_modules.get(mod_id)
+                if module and hasattr(module, 'render'):
+                    module.render(app.renderer)
+                    rendered_count += 1
+                    test_logger.debug(f"    Rendered: {mod_id}")
+                app.stop_module(mod_id)
+        except Exception as e:
+            failed.append(f"{mod_id}: {e}")
+            test_logger.debug(f"    Failed to render {mod_id}: {e}")
+
+    app.shutdown()
+
+    assert rendered_count > 0, "At least one module should render"
+    test_logger.info(f"  Rendered {rendered_count}/{len(AVAILABLE_MODULES)} modules")
+    if failed:
+        test_logger.warning(f"  Failed: {failed[:3]}")
+
+
+# ============================================================================
 # Integration Tests
 # ============================================================================
 
@@ -292,6 +440,27 @@ def create_state_test_suite() -> TestSuite:
     return suite
 
 
+def create_renderer_test_suite() -> TestSuite:
+    """Create the renderer test suite."""
+    suite = TestSuite("Renderer")
+
+    suite.add_test("Headless Renderer Init", test_headless_renderer_init)
+    suite.add_test("Renderer Draw Operations", test_renderer_draw_operations)
+
+    return suite
+
+
+def create_app_test_suite() -> TestSuite:
+    """Create the application lifecycle test suite."""
+    suite = TestSuite("Application Lifecycle")
+
+    suite.add_test("App Initialization", test_app_initialization)
+    suite.add_test("Module Lifecycle", test_app_module_lifecycle)
+    suite.add_test("Module Render Pipeline", test_module_render_pipeline)
+
+    return suite
+
+
 def create_integration_test_suite() -> TestSuite:
     """Create the integration test suite."""
     suite = TestSuite("Integration")
@@ -314,6 +483,8 @@ def run_all_tests() -> bool:
         create_core_test_suite(),
         create_module_test_suite(),
         create_state_test_suite(),
+        create_renderer_test_suite(),
+        create_app_test_suite(),
         create_integration_test_suite(),
     ]
 
@@ -334,15 +505,17 @@ def run_all_tests() -> bool:
 
 def main():
     """Main entry point for CLI tests."""
+    import logging as log_module
+
     parser = argparse.ArgumentParser(description='MetaMindIQTrain CLI Test Framework')
-    parser.add_argument('--suite', choices=['core', 'modules', 'state', 'integration', 'all'],
+    parser.add_argument('--suite', choices=['core', 'modules', 'state', 'renderer', 'app', 'integration', 'all'],
                         default='all', help='Test suite to run')
     parser.add_argument('--verbose', '-v', action='store_true', help='Verbose output')
 
     args = parser.parse_args()
 
     if args.verbose:
-        setup_logging(console_level=logging.DEBUG)
+        setup_logging(console_level=log_module.DEBUG)
 
     success = False
 
@@ -354,6 +527,10 @@ def main():
         success = create_module_test_suite().run()
     elif args.suite == 'state':
         success = create_state_test_suite().run()
+    elif args.suite == 'renderer':
+        success = create_renderer_test_suite().run()
+    elif args.suite == 'app':
+        success = create_app_test_suite().run()
     elif args.suite == 'integration':
         success = create_integration_test_suite().run()
 
