@@ -161,10 +161,25 @@ class SymbolMemory(TrainingModule):
     
     def build_ui(self):
         """Build the UI component tree.
-        
+
         This is used by modern renderers that support component-based rendering.
-        
+
         Returns:
             UI component tree specification
         """
-        return self.view.build_component_tree() 
+        return self.view.build_component_tree()
+
+    def render(self, renderer):
+        """Render the module using the provided renderer.
+
+        This method renders the module's UI using the renderer abstraction,
+        delegating to the view for the actual drawing.
+
+        Args:
+            renderer: The renderer instance to use for drawing.
+        """
+        # Update view dimensions
+        self.view.set_dimensions(self.screen_width, self.screen_height)
+
+        # Render using the view
+        self.view.render_to_renderer(renderer, self.model)

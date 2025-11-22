@@ -536,14 +536,74 @@ class TrainingModule(ABC):
     def update(self, dt):
         """
         Update the module state.
-        
+
         This method is called periodically to update the module state.
         It can be overridden by subclasses to implement time-based updates.
-        
+
         Args:
             dt: Time delta since last update in seconds.
         """
         self.last_update_time = time.time()
+
+    def render(self, renderer):
+        """
+        Render the module using the provided renderer.
+
+        This method renders the module's UI using the renderer abstraction.
+        It can be overridden by subclasses to implement custom rendering.
+        The default implementation renders a basic placeholder UI.
+
+        Args:
+            renderer: The renderer instance to use for drawing.
+        """
+        # Clear with background color
+        renderer.clear((20, 20, 40, 255))
+
+        # Draw module name as title
+        renderer.draw_text(
+            self.screen_width // 2, 50,
+            self.name,
+            font_size=32,
+            color=(255, 255, 255, 255),
+            align="center"
+        )
+
+        # Draw description
+        if hasattr(self, 'description'):
+            renderer.draw_text(
+                self.screen_width // 2, 100,
+                self.description,
+                font_size=20,
+                color=(200, 200, 200, 255),
+                align="center"
+            )
+
+        # Draw score and level
+        renderer.draw_text(
+            50, 30,
+            f"Level: {self.level}",
+            font_size=18,
+            color=(200, 200, 200, 255),
+            align="left"
+        )
+
+        renderer.draw_text(
+            self.screen_width - 50, 30,
+            f"Score: {self.score}",
+            font_size=18,
+            color=(200, 200, 200, 255),
+            align="right"
+        )
+
+        # Draw message if any
+        if self.message:
+            renderer.draw_text(
+                self.screen_width // 2, self.screen_height - 50,
+                self.message,
+                font_size=18,
+                color=(255, 255, 0, 255),
+                align="center"
+            )
         
     def track_property(self, property_name):
         """
