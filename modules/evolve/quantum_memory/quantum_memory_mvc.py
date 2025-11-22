@@ -13,15 +13,25 @@ import logging
 from pathlib import Path
 from typing import Dict, List, Tuple, Any, Optional
 
-# Add the parent directory to sys.path for absolute imports when imported directly
-if __name__ == "__main__" or not __package__:
-    project_root = Path(__file__).parent.parent.parent.parent
-    sys.path.insert(0, str(project_root))
+# Ensure project root is in path for imports
+_project_root = Path(__file__).resolve().parent.parent.parent.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
 
-from MetaMindIQTrain.modules.base_module import BaseModule
-from MetaMindIQTrain.modules.evolve.quantum_memory.quantum_memory_model import QuantumMemoryModel
-from MetaMindIQTrain.modules.evolve.quantum_memory.quantum_memory_view import QuantumMemoryView
-from MetaMindIQTrain.modules.evolve.quantum_memory.quantum_memory_controller import QuantumMemoryController
+# Import BaseModule - try multiple approaches
+try:
+    from modules.base_module import BaseModule
+except ImportError:
+    try:
+        from core.training_module import TrainingModule as BaseModule
+    except ImportError:
+        class BaseModule:
+            def __init__(self, config=None): pass
+
+# Import local MVC components
+from modules.evolve.quantum_memory.quantum_memory_model import QuantumMemoryModel
+from modules.evolve.quantum_memory.quantum_memory_view import QuantumMemoryView
+from modules.evolve.quantum_memory.quantum_memory_controller import QuantumMemoryController
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)

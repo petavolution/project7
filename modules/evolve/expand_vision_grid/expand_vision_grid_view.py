@@ -14,16 +14,21 @@ import sys
 from pathlib import Path
 from typing import List, Dict, Tuple, Any, Optional, Union, Set
 
-# Add the parent directory to sys.path for absolute imports
-if __name__ == "__main__" or not __package__:
-    project_root = Path(__file__).parent.parent.parent.parent
-    sys.path.insert(0, str(project_root))
-    from MetaMindIQTrain.core.theme_manager import ThemeManager
-else:
-    # Use relative imports when imported as a module
-    from ....core.theme_manager import ThemeManager
+# Ensure project root is in path
+_project_root = Path(__file__).resolve().parent.parent.parent.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
 
-from .expand_vision_grid_model import ExpandVisionGridModel
+# Import theme manager - try multiple approaches
+try:
+    from core.theme_manager import ThemeManager
+except ImportError:
+    try:
+        from core.theme import Theme as ThemeManager
+    except ImportError:
+        ThemeManager = None
+
+from modules.evolve.expand_vision_grid.expand_vision_grid_model import ExpandVisionGridModel
 
 class ExpandVisionGridView:
     """View component for ExpandVision Grid module - handles UI representation."""

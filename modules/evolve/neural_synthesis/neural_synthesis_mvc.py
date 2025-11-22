@@ -15,18 +15,15 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Tuple, Any, Optional
 
-# Add the parent directory to sys.path for absolute imports when imported directly
-if __name__ == "__main__" or not __package__:
-    project_root = Path(__file__).parent.parent.parent.parent
-    sys.path.insert(0, str(project_root))
-    from .neural_synthesis_model import NeuralSynthesisModel
-    from .neural_synthesis_view import NeuralSynthesisView
-    from .neural_synthesis_controller import NeuralSynthesisController
-else:
-    # Use relative imports when imported as a module
-    from .neural_synthesis_model import NeuralSynthesisModel
-    from .neural_synthesis_view import NeuralSynthesisView
-    from .neural_synthesis_controller import NeuralSynthesisController
+# Ensure project root is in path for imports
+_project_root = Path(__file__).resolve().parent.parent.parent.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
+
+# Import local MVC components
+from modules.evolve.neural_synthesis.neural_synthesis_model import NeuralSynthesisModel
+from modules.evolve.neural_synthesis.neural_synthesis_view import NeuralSynthesisView
+from modules.evolve.neural_synthesis.neural_synthesis_controller import NeuralSynthesisController
 
 
 class NeuralSynthesis:

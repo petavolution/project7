@@ -23,18 +23,25 @@ import time
 from pathlib import Path
 from typing import Dict, List, Tuple, Any, Optional
 
-# Add the parent directory to sys.path for absolute imports
-if __name__ == "__main__" or not __package__:
-    project_root = Path(__file__).parent.parent.parent.parent
-    sys.path.insert(0, str(project_root))
-    from MetaMindIQTrain.core.training_module import TrainingModule
-else:
-    # Use relative imports when imported as a module
-    from ....core.training_module import TrainingModule
+# Ensure project root is in path for imports
+_project_root = Path(__file__).resolve().parent.parent.parent.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
 
-from .expand_vision_model import ExpandVisionModel
-from .expand_vision_view import ExpandVisionView
-from .expand_vision_controller import ExpandVisionController
+# Import TrainingModule - try multiple approaches for robustness
+try:
+    from core.training_module import TrainingModule
+except ImportError:
+    try:
+        from MetaMindIQTrain.core.training_module import TrainingModule
+    except ImportError:
+        class TrainingModule:
+            def __init__(self): pass
+
+# Import local MVC components
+from modules.evolve.expand_vision.expand_vision_model import ExpandVisionModel
+from modules.evolve.expand_vision.expand_vision_view import ExpandVisionView
+from modules.evolve.expand_vision.expand_vision_controller import ExpandVisionController
 
 class ExpandVision(TrainingModule):
     """ExpandVision Training Module - Enhances peripheral vision and numerical processing.
