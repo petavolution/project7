@@ -72,14 +72,30 @@ def apply_delta(base_state, delta):
     result.update(delta)
     return result
 
-# Make the TrainingModule class available at the package level
-from .training_module import TrainingModule
+# Lazy import for TrainingModule to avoid circular import issues
+# Use: from core.training_module import TrainingModule
+# Or the lazy accessor: core.get_training_module_class()
 
-# Avoid circular imports by not importing client_base at the top level
-# Use explicit imports in files that need these
+_training_module_class = None
+
+def get_training_module_class():
+    """Lazy accessor for TrainingModule class."""
+    global _training_module_class
+    if _training_module_class is None:
+        from .training_module import TrainingModule
+        _training_module_class = TrainingModule
+    return _training_module_class
+
+# Also provide direct access for backwards compatibility
+# This import happens after the functions are defined
+try:
+    from .training_module import TrainingModule
+except ImportError:
+    TrainingModule = None
 
 __all__ = [
     'TrainingModule',
+    'get_training_module_class',
     'compute_delta',
     'apply_delta',
     'PROTOCOL_VERSION',

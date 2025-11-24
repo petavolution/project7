@@ -10,11 +10,52 @@ import json
 import logging
 import time
 import uuid
+import sys
+import os
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional, Tuple, Set
+from pathlib import Path
 
-from ..config import SCREEN_WIDTH, SCREEN_HEIGHT, calculate_sizes
-from .components import UI, Component, get_component_stats
+# Ensure project root is in path for imports
+_project_root = Path(__file__).resolve().parent.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
+
+# Import config - try multiple approaches for robustness
+try:
+    from config import SCREEN_WIDTH, SCREEN_HEIGHT, calculate_sizes
+except ImportError:
+    try:
+        from ..config import SCREEN_WIDTH, SCREEN_HEIGHT, calculate_sizes
+    except ImportError:
+        # Fallback defaults if config unavailable
+        SCREEN_WIDTH = 1440
+        SCREEN_HEIGHT = 1024
+        def calculate_sizes(width, height):
+            return {
+                'SCREEN_WIDTH': width,
+                'SCREEN_HEIGHT': height,
+                'UI_HEADER_HEIGHT': int(height * 0.15),
+                'UI_FOOTER_HEIGHT': int(height * 0.12),
+                'UI_CONTENT_HEIGHT': int(height * 0.73),
+            }
+
+# Import components - try multiple approaches
+try:
+    from core.components import UI, Component, get_component_stats
+except ImportError:
+    try:
+        from .components import UI, Component, get_component_stats
+    except ImportError:
+        # Minimal fallback if components unavailable
+        class UI:
+            def __init__(self): self.components = []
+            def clear(self): self.components = []
+            def add_component(self, c): self.components.append(c)
+            def to_dict(self): return {'components': self.components}
+            def text(self, **kwargs): return kwargs
+        class Component: pass
+        def get_component_stats(): return {}
 
 # Set up logging
 logging.basicConfig(level=logging.INFO,
@@ -495,14 +536,74 @@ class TrainingModule(ABC):
     def update(self, dt):
         """
         Update the module state.
-        
+
         This method is called periodically to update the module state.
         It can be overridden by subclasses to implement time-based updates.
-        
+
         Args:
             dt: Time delta since last update in seconds.
         """
         self.last_update_time = time.time()
+
+    def render(self, renderer):
+        """
+        Render the module using the provided renderer.
+
+        This method renders the module's UI using the renderer abstraction.
+        It can be overridden by subclasses to implement custom rendering.
+        The default implementation renders a basic placeholder UI.
+
+        Args:
+            renderer: The renderer instance to use for drawing.
+        """
+        # Clear with background color
+        renderer.clear((20, 20, 40, 255))
+
+        # Draw module name as title
+        renderer.draw_text(
+            self.screen_width // 2, 50,
+            self.name,
+            font_size=32,
+            color=(255, 255, 255, 255),
+            align="center"
+        )
+
+        # Draw description
+        if hasattr(self, 'description'):
+            renderer.draw_text(
+                self.screen_width // 2, 100,
+                self.description,
+                font_size=20,
+                color=(200, 200, 200, 255),
+                align="center"
+            )
+
+        # Draw score and level
+        renderer.draw_text(
+            50, 30,
+            f"Level: {self.level}",
+            font_size=18,
+            color=(200, 200, 200, 255),
+            align="left"
+        )
+
+        renderer.draw_text(
+            self.screen_width - 50, 30,
+            f"Score: {self.score}",
+            font_size=18,
+            color=(200, 200, 200, 255),
+            align="right"
+        )
+
+        # Draw message if any
+        if self.message:
+            renderer.draw_text(
+                self.screen_width // 2, self.screen_height - 50,
+                self.message,
+                font_size=18,
+                color=(255, 255, 0, 255),
+                align="center"
+            )
         
     def track_property(self, property_name):
         """
@@ -547,15 +648,21 @@ available_modules = {}
 
 def get_available_modules() -> Dict[str, type]:
     """Get available training modules.
-    
+
     Returns:
         Dictionary of available modules
     """
-    # Import modules here to avoid circular imports
-    from MetaMindIQTrain.modules.test_module import TestTrainingModule
-    
-    modules = {
-        'test_module': TestTrainingModule
-    }
-    
+    modules = {}
+
+    # Try to import test module - multiple import paths for robustness
+    try:
+        from modules.test_module import TestTrainingModule
+        modules['test_module'] = TestTrainingModule
+    except ImportError:
+        try:
+            from MetaMindIQTrain.modules.test_module import TestTrainingModule
+            modules['test_module'] = TestTrainingModule
+        except ImportError:
+            pass  # Module not available
+
     return modules 

@@ -11,20 +11,47 @@ This module handles the UI representation for the Neural Flow training module:
 
 import math
 import sys
-import pygame
 from pathlib import Path
 from typing import Dict, List, Tuple, Any, Optional
 
-# Add the parent directory to sys.path for absolute imports when imported directly
-if __name__ == "__main__" or not __package__:
-    project_root = Path(__file__).parent.parent.parent.parent
-    sys.path.insert(0, str(project_root))
-    from MetaMindIQTrain.core.theme_manager import ThemeManager
-    from MetaMindIQTrain.core.config import config
-else:
-    # Use relative imports when imported as a module
-    from ....core.theme_manager import ThemeManager
-    from ....core.config import config
+# Lazy import for pygame - only load if actually needed for pygame-specific rendering
+pygame = None
+def _get_pygame():
+    """Lazy load pygame only when needed."""
+    global pygame
+    if pygame is None:
+        try:
+            import pygame as _pygame
+            pygame = _pygame
+        except ImportError:
+            pass
+    return pygame
+
+# Ensure project root is in path
+_project_root = Path(__file__).resolve().parent.parent.parent.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
+
+# Import theme manager - try multiple approaches
+try:
+    from core.theme_manager import ThemeManager
+except ImportError:
+    try:
+        from core.theme import Theme as ThemeManager
+    except ImportError:
+        ThemeManager = None
+
+# Import config
+try:
+    from core.config import config
+except ImportError:
+    try:
+        from config import config
+    except ImportError:
+        # Minimal fallback config
+        class config:
+            UI_THEME = {"colors": {}, "layouts": {"neural_flow": {"node_radius": 2, "node_padding": 3, "path_thickness": 1}}}
+            MODULE_SETTINGS = {"neural_flow": {"visual_scale": 1.0}}
 
 
 class NeuralFlowView:
@@ -348,20 +375,25 @@ class NeuralFlowView:
         visual_scale = module_settings.get("visual_scale", 1.0)  # Default to 1.0 if not specified
         
         # Draw paths first (so they appear behind nodes)
+        pg = _get_pygame()
+        if not pg or not hasattr(renderer, 'screen'):
+            # If pygame not available or not a pygame renderer, skip pygame-specific rendering
+            return
+
         for i, path in enumerate(self.model.target_nodes):
             if i < len(self.model.target_nodes) - 1:
                 start = path["position"]
                 end = self.model.target_nodes[i + 1]["position"]
-                
+
                 # Draw path
-                pygame.draw.line(
+                pg.draw.line(
                     renderer.screen,
                     theme["colors"]["neural_path"],
                     start,
                     end,
                     self.path_thickness
                 )
-        
+
         # Draw nodes
         for i, node in enumerate(self.model.target_nodes):
             # Determine node color based on state
@@ -373,17 +405,17 @@ class NeuralFlowView:
                 color = theme["colors"]["neural_active"]
             else:
                 color = theme["colors"]["neural_node"]
-            
+
             # Draw node
-            pygame.draw.circle(
+            pg.draw.circle(
                 renderer.screen,
                 color,
                 node["position"],
                 node["radius"]
             )
-            
+
             # Draw node border
-            pygame.draw.circle(
+            pg.draw.circle(
                 renderer.screen,
                 theme["colors"]["border_color"],
                 node["position"],
@@ -422,4 +454,148 @@ class NeuralFlowView:
         phase_font = renderer.fonts["medium"]
         phase_surf = phase_font.render(phase_text, True, theme["colors"]["text"])
         phase_rect = phase_surf.get_rect(topright=(self.screen_width - 20, self.screen_height - 80))
-        renderer.screen.blit(phase_surf, phase_rect) 
+        renderer.screen.blit(phase_surf, phase_rect)
+
+    def render_to_renderer(self, renderer, model):
+        """Render the view using the renderer abstraction.
+
+        This method uses the renderer's drawing API instead of pygame directly,
+        allowing for headless rendering and different backend support.
+
+        Args:
+            renderer: The renderer instance with drawing methods
+            model: The model containing game state
+        """
+        # Get theme colors with defaults
+        bg_color = (20, 25, 31)
+        card_bg = (30, 36, 44)
+        text_color = (240, 240, 240)
+        primary_color = (0, 120, 255)
+        success_color = (50, 255, 80)
+        error_color = (255, 50, 50)
+        border_color = (60, 70, 80)
+        neural_node = (80, 100, 140)
+        neural_active = (100, 200, 255)
+        neural_path = (50, 60, 80)
+
+        try:
+            theme = config.UI_THEME
+            if theme and "colors" in theme:
+                colors = theme["colors"]
+                bg_color = colors.get("bg_color", bg_color)
+                card_bg = colors.get("card_bg", card_bg)
+                text_color = colors.get("text", text_color)
+                primary_color = colors.get("primary", primary_color)
+                success_color = colors.get("success_node", success_color)
+                error_color = colors.get("error_node", error_color)
+                border_color = colors.get("border_color", border_color)
+                neural_node = colors.get("neural_node", neural_node)
+                neural_active = colors.get("neural_active", neural_active)
+                neural_path = colors.get("neural_path", neural_path)
+        except Exception:
+            pass
+
+        # Clear with background color
+        renderer.clear((*bg_color, 255))
+
+        # Draw header background
+        header_height = 60
+        renderer.draw_rectangle(0, 0, self.screen_width, header_height, (*card_bg, 255))
+
+        # Draw title
+        renderer.draw_text(
+            self.screen_width // 2, 20,
+            "Neural Flow - Path Training",
+            font_size=20,
+            color=(*text_color, 255),
+            align="center"
+        )
+
+        # Draw score and level
+        score = model.score if hasattr(model, 'score') else 0
+        level = model.level if hasattr(model, 'level') else 1
+        renderer.draw_text(
+            self.screen_width - 30, 20,
+            f"Score: {score}",
+            font_size=16,
+            color=(*text_color, 255),
+            align="right"
+        )
+        renderer.draw_text(
+            30, 20,
+            f"Level: {level}",
+            font_size=16,
+            color=(*text_color, 255),
+            align="left"
+        )
+
+        # Draw paths between nodes
+        target_nodes = model.target_nodes if hasattr(model, 'target_nodes') else []
+        for i in range(len(target_nodes) - 1):
+            if i < len(target_nodes) - 1:
+                start = target_nodes[i].get("position", (0, 0))
+                end = target_nodes[i + 1].get("position", (0, 0))
+                renderer.draw_line(
+                    start[0], start[1],
+                    end[0], end[1],
+                    (*neural_path, 255),
+                    width=self.path_thickness
+                )
+
+        # Draw nodes
+        success_nodes = model.success_nodes if hasattr(model, 'success_nodes') else []
+        error_nodes = model.error_nodes if hasattr(model, 'error_nodes') else []
+        active_nodes = model.active_nodes if hasattr(model, 'active_nodes') else []
+
+        for node in target_nodes:
+            pos = node.get("position", (0, 0))
+            radius = node.get("radius", self.node_radius)
+
+            # Determine node color based on state
+            if node in success_nodes:
+                color = success_color
+            elif node in error_nodes:
+                color = error_color
+            elif node in active_nodes:
+                color = neural_active
+            else:
+                color = neural_node
+
+            # Draw filled node
+            renderer.draw_circle(pos[0], pos[1], radius, (*color, 255))
+            # Draw node border
+            renderer.draw_circle(pos[0], pos[1], radius, (*border_color, 255), filled=False)
+
+        # Draw phase indicator
+        phase = model.phase if hasattr(model, 'phase') else 'waiting'
+        phase_text = f"Phase: {phase.capitalize()}"
+        renderer.draw_text(
+            self.screen_width // 2, header_height + 10,
+            phase_text,
+            font_size=14,
+            color=(*text_color, 255),
+            align="center"
+        )
+
+        # Draw progress at bottom
+        targets_found = model.targets_found if hasattr(model, 'targets_found') else 0
+        total_targets = len(target_nodes)
+        progress_text = f"Nodes: {targets_found}/{total_targets}"
+        renderer.draw_text(
+            self.screen_width // 2, self.screen_height - 40,
+            progress_text,
+            font_size=16,
+            color=(*text_color, 255),
+            align="center"
+        )
+
+        # Draw message if any
+        message = model.message if hasattr(model, 'message') else ""
+        if message:
+            renderer.draw_text(
+                self.screen_width // 2, self.screen_height - 70,
+                message,
+                font_size=14,
+                color=(*primary_color, 255),
+                align="center"
+            ) 

@@ -13,14 +13,19 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Tuple, Any, Optional
 
-# Add the parent directory to sys.path for absolute imports when imported directly
-if __name__ == "__main__" or not __package__:
-    project_root = Path(__file__).parent.parent.parent.parent
-    sys.path.insert(0, str(project_root))
-    from MetaMindIQTrain.core.theme_manager import ThemeManager
-else:
-    # Use relative imports when imported as a module
-    from ....core.theme_manager import ThemeManager
+# Ensure project root is in path
+_project_root = Path(__file__).resolve().parent.parent.parent.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
+
+# Import theme manager - try multiple approaches
+try:
+    from core.theme_manager import ThemeManager
+except ImportError:
+    try:
+        from core.theme import Theme as ThemeManager
+    except ImportError:
+        ThemeManager = None
 
 
 class NeuralSynthesisView:
@@ -395,10 +400,268 @@ class NeuralSynthesisView:
     
     def render(self, renderer):
         """Render the module using the pygame renderer.
-        
+
         Args:
             renderer: Renderer instance
         """
         # This method is used if the module needs to render directly with pygame
         # instead of using the component tree
-        pass 
+        pass
+
+    def render_to_renderer(self, renderer, model):
+        """Render the view using the renderer abstraction.
+
+        This method uses the renderer's drawing API instead of pygame directly,
+        allowing for headless rendering and different backend support.
+
+        Args:
+            renderer: The renderer instance with drawing methods
+            model: The model containing game state
+        """
+        # Get theme colors
+        bg_color = (20, 25, 31)
+        card_bg = (30, 36, 44)
+        text_color = (240, 240, 240)
+        primary_color = (0, 120, 255)
+        success_color = (50, 255, 80)
+        error_color = (255, 50, 50)
+        border_color = (60, 70, 80)
+
+        if ThemeManager:
+            bg_color = ThemeManager.get_color("bg_color")
+            card_bg = ThemeManager.get_color("card_bg")
+            text_color = ThemeManager.get_color("text_color")
+            primary_color = ThemeManager.get_color("primary_color")
+            success_color = ThemeManager.get_color("success_color")
+            error_color = ThemeManager.get_color("error_color")
+            border_color = ThemeManager.get_color("border_color")
+
+        # Clear with background color
+        renderer.clear((*bg_color, 255))
+
+        # Draw header background
+        header_height = 50
+        renderer.draw_rectangle(0, 0, self.screen_width, header_height, (*card_bg, 255))
+
+        # Draw title
+        renderer.draw_text(
+            self.screen_width // 2, 15,
+            "Neural Synthesis - Cross-Modal Training",
+            font_size=18,
+            color=(*text_color, 255),
+            align="center"
+        )
+
+        # Draw score
+        score = model.score if hasattr(model, 'score') else 0
+        renderer.draw_text(
+            self.screen_width - 30, 15,
+            f"Score: {score}",
+            font_size=18,
+            color=(*text_color, 255),
+            align="right"
+        )
+
+        # Draw level and trial info
+        level = model.level if hasattr(model, 'level') else 1
+        grid_size = model.grid_size if hasattr(model, 'grid_size') else 4
+        seq_length = model.sequence_length if hasattr(model, 'sequence_length') else 3
+        current_trial = model.current_trial if hasattr(model, 'current_trial') else 0
+        trials_per_level = model.trials_per_level if hasattr(model, 'trials_per_level') else 5
+
+        level_info = f"Level {level}: {grid_size}x{grid_size} grid, {seq_length} items"
+        renderer.draw_text(
+            self.screen_width // 2, 60,
+            level_info,
+            font_size=16,
+            color=(*text_color, 255),
+            align="center"
+        )
+
+        trial_text = f"Trial {current_trial + 1} of {trials_per_level}"
+        renderer.draw_text(
+            self.screen_width // 2, 85,
+            trial_text,
+            font_size=16,
+            color=(*text_color, 255),
+            align="center"
+        )
+
+        # Draw the grid
+        self._render_grid(renderer, model, card_bg, border_color, success_color, error_color)
+
+        # Draw instructions based on phase
+        self._render_instructions(renderer, model, text_color, primary_color, success_color, error_color)
+
+    def _render_grid(self, renderer, model, card_bg, border_color, success_color, error_color):
+        """Render the pattern grid.
+
+        Args:
+            renderer: The renderer instance
+            model: The model containing grid data
+            card_bg: Card background color
+            border_color: Border color
+            success_color: Color for correct answers
+            error_color: Color for incorrect answers
+        """
+        grid_x, grid_y = model.grid_position if hasattr(model, 'grid_position') else (100, 120)
+        cell_size = model.cell_size if hasattr(model, 'cell_size') else 60
+        grid_size = model.grid_size if hasattr(model, 'grid_size') else 4
+        grid_width = grid_size * cell_size
+        grid_height = grid_size * cell_size
+
+        # Draw grid background
+        renderer.draw_rectangle(
+            grid_x - 5, grid_y - 5,
+            grid_width + 10, grid_height + 10,
+            (*card_bg, 255)
+        )
+
+        # Get colors list
+        colors = model.colors if hasattr(model, 'colors') else []
+        current_sequence = model.current_sequence if hasattr(model, 'current_sequence') else []
+        user_sequence = model.user_sequence if hasattr(model, 'user_sequence') else []
+        phase = model.phase if hasattr(model, 'phase') else 'observation'
+
+        # Draw cells
+        for y in range(grid_size):
+            for x in range(grid_size):
+                cell_x = grid_x + x * cell_size
+                cell_y = grid_y + y * cell_size
+
+                # Default cell color (darker background)
+                cell_color = (20, 24, 32)
+
+                # In observation phase, show the pattern
+                if phase == "observation":
+                    for item in current_sequence:
+                        if item.get("position") == (x, y):
+                            color_idx = item.get("color_idx", 0)
+                            if color_idx < len(colors):
+                                rgb = colors[color_idx].get("rgb", (100, 100, 100))
+                                cell_color = rgb
+
+                # In feedback phase, show correct and user selections
+                elif phase == "feedback":
+                    # First check if it's a target
+                    is_target = False
+                    for item in current_sequence:
+                        if item.get("position") == (x, y):
+                            is_target = True
+                            color_idx = item.get("color_idx", 0)
+                            if color_idx < len(colors):
+                                rgb = colors[color_idx].get("rgb", (100, 100, 100))
+                                cell_color = rgb
+
+                    # Check if user selected this cell incorrectly
+                    for item in user_sequence:
+                        if item.get("position") == (x, y):
+                            if not is_target:
+                                # User selected wrong cell - show error
+                                cell_color = error_color
+
+                # Draw the cell
+                renderer.draw_rectangle(
+                    cell_x + 1, cell_y + 1,
+                    cell_size - 2, cell_size - 2,
+                    (*cell_color, 255)
+                )
+
+                # Draw cell border
+                renderer.draw_rectangle(
+                    cell_x, cell_y,
+                    cell_size, cell_size,
+                    (*border_color, 255),
+                    filled=False
+                )
+
+    def _render_instructions(self, renderer, model, text_color, primary_color, success_color, error_color):
+        """Render instructions and buttons based on phase.
+
+        Args:
+            renderer: The renderer instance
+            model: The model containing state
+            text_color: Text color
+            primary_color: Button color
+            success_color: Success message color
+            error_color: Error message color
+        """
+        phase = model.phase if hasattr(model, 'phase') else 'observation'
+        grid_x, grid_y = model.grid_position if hasattr(model, 'grid_position') else (100, 120)
+        cell_size = model.cell_size if hasattr(model, 'cell_size') else 60
+        grid_size = model.grid_size if hasattr(model, 'grid_size') else 4
+        grid_height = grid_size * cell_size
+
+        instruction_y = grid_y + grid_height + 30
+        message = model.message if hasattr(model, 'message') else ""
+
+        if phase == "observation":
+            renderer.draw_text(
+                self.screen_width // 2, instruction_y,
+                "Observe the pattern carefully!",
+                font_size=18,
+                color=(*text_color, 255),
+                align="center"
+            )
+        elif phase == "reproduction":
+            renderer.draw_text(
+                self.screen_width // 2, instruction_y,
+                "Reproduce the pattern by clicking cells",
+                font_size=18,
+                color=(*text_color, 255),
+                align="center"
+            )
+            # Show progress
+            seq_length = model.sequence_length if hasattr(model, 'sequence_length') else 3
+            user_sequence = model.user_sequence if hasattr(model, 'user_sequence') else []
+            progress_text = f"Selected: {len(user_sequence)} / {seq_length}"
+            renderer.draw_text(
+                self.screen_width // 2, instruction_y + 30,
+                progress_text,
+                font_size=16,
+                color=(*text_color, 255),
+                align="center"
+            )
+        elif phase == "feedback":
+            # Show result message
+            last_correct = model.last_trial_correct if hasattr(model, 'last_trial_correct') else False
+            msg_color = success_color if last_correct else error_color
+            result_text = "Correct!" if last_correct else "Incorrect"
+
+            renderer.draw_text(
+                self.screen_width // 2, instruction_y,
+                result_text,
+                font_size=24,
+                color=(*msg_color, 255),
+                align="center"
+            )
+
+            # Show continue button
+            btn_width = 150
+            btn_height = 40
+            btn_x = (self.screen_width - btn_width) // 2
+            btn_y = instruction_y + 50
+
+            renderer.draw_rounded_rectangle(
+                btn_x, btn_y, btn_width, btn_height,
+                (*primary_color, 255),
+                radius=5
+            )
+            renderer.draw_text(
+                self.screen_width // 2, btn_y + btn_height // 2,
+                "Continue",
+                font_size=16,
+                color=(255, 255, 255, 255),
+                align="center",
+                center_vertically=True
+            )
+
+        # Show any message from model
+        if message:
+            renderer.draw_text(
+                self.screen_width // 2, self.screen_height - 40,
+                message,
+                font_size=14,
+                color=(*text_color, 255),
+                align="center"
+            ) 

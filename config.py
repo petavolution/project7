@@ -76,6 +76,95 @@ MODULE_LIST_SPACING_PERCENT = 0.01      # 1% spacing between module list items
 MODULE_LIST_WIDTH_PERCENT = 0.60        # Module list width is 60% of screen width
 MODULE_DESCRIPTION_HEIGHT_PERCENT = 0.05 # Description height is 5% of screen height
 
+# UI Theme configuration - centralized theme styling for all modules
+UI_THEME = {
+    "colors": {
+        "bg_color": (15, 18, 28),           # Main background
+        "bg_dark": (10, 12, 20),             # Darker background
+        "bg_light": (30, 35, 50),            # Lighter background for cards
+        "card_bg": (22, 26, 38),             # Card background
+        "card_hover": (35, 42, 60),          # Card hover state
+        "text_color": (220, 225, 235),       # Primary text
+        "text_muted": (150, 155, 165),       # Muted text
+        "border_color": (60, 70, 90),        # Border color
+        "primary_color": (80, 120, 200),     # Primary accent
+        "secondary_color": (100, 160, 255),  # Secondary accent
+        "success_color": (70, 200, 120),     # Success/correct
+        "error_color": (230, 70, 80),        # Error/incorrect
+        "warning_color": (240, 180, 60),     # Warning
+    },
+    "layouts": {
+        "symbol_memory": {
+            "grid_margin": 5,      # Grid margin as percentage
+            "grid_padding": 2,     # Grid padding as percentage
+            "cell_margin": 1,      # Cell margin as percentage
+        },
+        "morph_matrix": {
+            "grid_margin": 5,
+            "grid_padding": 2,
+            "cell_margin": 1,
+        },
+        "expand_vision": {
+            "grid_margin": 5,
+            "grid_padding": 2,
+        },
+        "neural_flow": {
+            "node_radius": 2,
+            "node_padding": 3,
+            "path_thickness": 1,
+        },
+        "neural_synthesis": {
+            "grid_margin": 5,
+            "grid_padding": 2,
+            "cell_margin": 1,
+        }
+    }
+}
+
+# Module-specific settings for visual customization
+MODULE_SETTINGS = {
+    "symbol_memory": {
+        "visual_scale": 1.0,          # Scale factor for visual elements
+        "preserve_font_size": True,   # Keep font size consistent
+        "animation_speed": 1.0,       # Animation speed multiplier
+    },
+    "morph_matrix": {
+        "visual_scale": 1.0,
+        "preserve_font_size": True,
+        "animation_speed": 1.0,
+    },
+    "expand_vision": {
+        "visual_scale": 1.0,
+        "preserve_font_size": True,
+        "animation_speed": 1.0,
+    },
+    "expand_vision_grid": {
+        "visual_scale": 1.0,
+        "preserve_font_size": True,
+        "animation_speed": 1.0,
+    },
+    "neural_flow": {
+        "visual_scale": 1.0,
+        "preserve_font_size": True,
+        "animation_speed": 1.0,
+    },
+    "quantum_memory": {
+        "visual_scale": 1.0,
+        "preserve_font_size": True,
+        "animation_speed": 1.0,
+    },
+    "neural_synthesis": {
+        "visual_scale": 1.0,
+        "preserve_font_size": True,
+        "animation_speed": 1.0,
+    },
+    "synesthetic_training": {
+        "visual_scale": 1.0,
+        "preserve_font_size": True,
+        "animation_speed": 1.0,
+    }
+}
+
 # Module-specific color schemes - providing consistent dark theme across modules
 MODULE_COLORS = {
     'symbol_memory': {

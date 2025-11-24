@@ -69,16 +69,17 @@ class RenderBackend(ABC):
         pass
         
     @abstractmethod
-    def draw_rectangle(self, x: int, y: int, width: int, height: int, 
-                      color: Tuple[int, int, int, int]) -> None:
-        """Draw a filled rectangle.
-        
+    def draw_rectangle(self, x: int, y: int, width: int, height: int,
+                      color: Tuple[int, int, int, int], filled: bool = True) -> None:
+        """Draw a rectangle.
+
         Args:
             x: X coordinate
             y: Y coordinate
             width: Rectangle width
             height: Rectangle height
             color: Fill color (RGBA)
+            filled: Whether to fill the rectangle (default True)
         """
         pass
         
@@ -139,12 +140,12 @@ class RenderBackend(ABC):
         pass
         
     @abstractmethod
-    def draw_circle(self, x: int, y: int, radius: int, 
+    def draw_circle(self, x: int, y: int, radius: int,
                    color: Tuple[int, int, int, int],
                    border_color: Optional[Tuple[int, int, int, int]] = None,
-                   border_width: int = 0) -> None:
-        """Draw a filled circle.
-        
+                   border_width: int = 0, filled: bool = True) -> None:
+        """Draw a circle.
+
         Args:
             x: Center X coordinate
             y: Center Y coordinate
@@ -152,6 +153,7 @@ class RenderBackend(ABC):
             color: Fill color (RGBA)
             border_color: Border color (RGBA) or None for no border
             border_width: Border width in pixels
+            filled: Whether to fill the circle (default True)
         """
         pass
         
@@ -320,24 +322,28 @@ class PygameBackend(RenderBackend):
         
         return events
 
-    def draw_rectangle(self, x: int, y: int, width: int, height: int, 
-                      color: Tuple[int, int, int, int]) -> None:
-        """Draw a filled rectangle with alpha support."""
+    def draw_rectangle(self, x: int, y: int, width: int, height: int,
+                      color: Tuple[int, int, int, int], filled: bool = True) -> None:
+        """Draw a rectangle with alpha support."""
         if not self.initialized:
             return
-            
+
         import pygame
-        
-        # Handle alpha channel properly
-        if len(color) > 3 and color[3] < 255:
-            # Create a surface with per-pixel alpha
-            surface = pygame.Surface((width, height), pygame.SRCALPHA)
-            surface.fill(color)
-            self.screen.blit(surface, (x, y))
+
+        if filled:
+            # Handle alpha channel properly
+            if len(color) > 3 and color[3] < 255:
+                # Create a surface with per-pixel alpha
+                surface = pygame.Surface((width, height), pygame.SRCALPHA)
+                surface.fill(color)
+                self.screen.blit(surface, (x, y))
+            else:
+                # Use the faster draw.rect for opaque rectangles
+                pygame.draw.rect(self.screen, color[:3], (x, y, width, height))
         else:
-            # Use the faster draw.rect for opaque rectangles
-            pygame.draw.rect(self.screen, color[:3], (x, y, width, height))
-        
+            # Draw outline only
+            pygame.draw.rect(self.screen, color[:3], (x, y, width, height), 1)
+
         self.render_stats["draw_calls"] += 1
     
     def draw_rounded_rectangle(self, x: int, y: int, width: int, height: int,
@@ -418,23 +424,27 @@ class PygameBackend(RenderBackend):
         
         return (text_rect.width, text_rect.height)
     
-    def draw_circle(self, x: int, y: int, radius: int, 
+    def draw_circle(self, x: int, y: int, radius: int,
                    color: Tuple[int, int, int, int],
                    border_color: Optional[Tuple[int, int, int, int]] = None,
-                   border_width: int = 0) -> None:
-        """Draw a filled circle using Pygame."""
+                   border_width: int = 0, filled: bool = True) -> None:
+        """Draw a circle using Pygame."""
         if not self.initialized:
             return
-            
+
         import pygame
-        
-        # Draw filled circle
-        pygame.draw.circle(self.screen, color[:3], (x, y), radius)
-        
+
+        if filled:
+            # Draw filled circle
+            pygame.draw.circle(self.screen, color[:3], (x, y), radius)
+        else:
+            # Draw outline only
+            pygame.draw.circle(self.screen, color[:3], (x, y), radius, 1)
+
         # Draw border if specified
         if border_color is not None and border_width > 0:
             pygame.draw.circle(self.screen, border_color[:3], (x, y), radius, border_width)
-        
+
         self.render_stats["draw_calls"] += 1
     
     def draw_image(self, x: int, y: int, image_path: str, 
@@ -590,9 +600,9 @@ class WebGLBackend(RenderBackend):
         """Process input events."""
         return []
         
-    def draw_rectangle(self, x: int, y: int, width: int, height: int, 
-                      color: Tuple[int, int, int, int]) -> None:
-        """Draw a filled rectangle."""
+    def draw_rectangle(self, x: int, y: int, width: int, height: int,
+                      color: Tuple[int, int, int, int], filled: bool = True) -> None:
+        """Draw a rectangle."""
         pass
         
     def draw_rounded_rectangle(self, x: int, y: int, width: int, height: int,
@@ -614,11 +624,11 @@ class WebGLBackend(RenderBackend):
         """Draw text."""
         return (0, 0)
         
-    def draw_circle(self, x: int, y: int, radius: int, 
+    def draw_circle(self, x: int, y: int, radius: int,
                    color: Tuple[int, int, int, int],
                    border_color: Optional[Tuple[int, int, int, int]] = None,
-                   border_width: int = 0) -> None:
-        """Draw a filled circle."""
+                   border_width: int = 0, filled: bool = True) -> None:
+        """Draw a circle."""
         pass
         
     def draw_image(self, x: int, y: int, image_path: str, 
@@ -682,8 +692,8 @@ class HeadlessBackend(RenderBackend):
         """Process events (returns empty list in headless mode)."""
         return []
         
-    def draw_rectangle(self, x: int, y: int, width: int, height: int, 
-                      color: Tuple[int, int, int, int]) -> None:
+    def draw_rectangle(self, x: int, y: int, width: int, height: int,
+                      color: Tuple[int, int, int, int], filled: bool = True) -> None:
         """Record a rectangle drawing in headless mode."""
         self.rendered_elements.append({
             'type': 'rectangle',
@@ -691,7 +701,8 @@ class HeadlessBackend(RenderBackend):
             'y': y,
             'width': width,
             'height': height,
-            'color': color
+            'color': color,
+            'filled': filled
         })
         
     def draw_rounded_rectangle(self, x: int, y: int, width: int, height: int,
@@ -747,10 +758,10 @@ class HeadlessBackend(RenderBackend):
         
         return (int(text_width), int(text_height))
         
-    def draw_circle(self, x: int, y: int, radius: int, 
+    def draw_circle(self, x: int, y: int, radius: int,
                    color: Tuple[int, int, int, int],
                    border_color: Optional[Tuple[int, int, int, int]] = None,
-                   border_width: int = 0) -> None:
+                   border_width: int = 0, filled: bool = True) -> None:
         """Record a circle drawing in headless mode."""
         self.rendered_elements.append({
             'type': 'circle',
@@ -759,7 +770,8 @@ class HeadlessBackend(RenderBackend):
             'radius': radius,
             'color': color,
             'border_color': border_color,
-            'border_width': border_width
+            'border_width': border_width,
+            'filled': filled
         })
         
     def draw_image(self, x: int, y: int, image_path: str, 
@@ -851,64 +863,70 @@ class Renderer:
                     center_vertically=True
                 )
 
-    def initialize(self, width: int, height: int, backend: str = "auto", 
+    def initialize(self, width: int, height: int, backend: str = "auto",
                   title: str = "MetaMindIQTrain") -> bool:
         """Initialize the renderer with specified backend.
-        
+
         Args:
             width: Window width
             height: Window height
             backend: Renderer backend to use ('auto', 'pygame', 'webgl', 'headless')
             title: Window title
-            
+
         Returns:
             True if initialization was successful, False otherwise
         """
         self.width = width
         self.height = height
-        
+
         if backend == "auto":
             # Try backends in order: pygame, webgl, headless
-            if self._try_initialize_backend(PygameBackend(), width, height, title):
+            pygame_backend = PygameBackend()
+            if pygame_backend.initialize(width, height, title):
+                self.backend = pygame_backend
                 self.backend_name = "pygame"
-            elif self._try_initialize_backend(WebGLBackend(), width, height, title):
-                self.backend_name = "webgl"
-            elif self._try_initialize_backend(HeadlessBackend(), width, height, title):
-                self.backend_name = "headless"
             else:
-                logger.error("All backends failed to initialize")
-                return False
+                webgl_backend = WebGLBackend()
+                if webgl_backend.initialize(width, height, title):
+                    self.backend = webgl_backend
+                    self.backend_name = "webgl"
+                else:
+                    headless_backend = HeadlessBackend()
+                    if headless_backend.initialize(width, height, title):
+                        self.backend = headless_backend
+                        self.backend_name = "headless"
+                    else:
+                        logger.error("All backends failed to initialize")
+                        return False
         elif backend == "pygame":
-            if self._try_initialize_backend(PygameBackend(), width, height, title):
+            pygame_backend = PygameBackend()
+            if pygame_backend.initialize(width, height, title):
+                self.backend = pygame_backend
                 self.backend_name = "pygame"
             else:
                 return False
         elif backend == "webgl":
-            if self._try_initialize_backend(WebGLBackend(), width, height, title):
+            webgl_backend = WebGLBackend()
+            if webgl_backend.initialize(width, height, title):
+                self.backend = webgl_backend
                 self.backend_name = "webgl"
             else:
                 return False
         elif backend == "headless":
-            if self._try_initialize_backend(HeadlessBackend(), width, height, title):
+            headless_backend = HeadlessBackend()
+            if headless_backend.initialize(width, height, title):
+                self.backend = headless_backend
                 self.backend_name = "headless"
             else:
                 return False
         else:
             logger.error(f"Unknown backend: {backend}")
             return False
-            
+
         logger.info(f"Using renderer backend: {self.backend_name}")
         self.initialized = True
         return True
-    
-    def _try_initialize_backend(self, backend, width, height, title):
-        """Try to initialize a backend and return True if successful."""
-        try:
-            return backend.initialize(width, height, title)
-        except Exception as e:
-            logger.error(f"Error initializing {backend.__class__.__name__} backend: {e}")
-            return False
-        
+
     def shutdown(self) -> None:
         """Shut down the renderer and active backend."""
         if self.backend:
@@ -949,11 +967,11 @@ class Renderer:
         
     # Forward drawing methods to the active backend
     
-    def draw_rectangle(self, x: int, y: int, width: int, height: int, 
-                      color: Tuple[int, int, int, int]) -> None:
-        """Draw a filled rectangle."""
+    def draw_rectangle(self, x: int, y: int, width: int, height: int,
+                      color: Tuple[int, int, int, int], filled: bool = True) -> None:
+        """Draw a rectangle."""
         if self.backend:
-            self.backend.draw_rectangle(x, y, width, height, color)
+            self.backend.draw_rectangle(x, y, width, height, color, filled)
             
     def draw_rounded_rectangle(self, x: int, y: int, width: int, height: int,
                               color: Tuple[int, int, int, int], radius: int = 5,
@@ -965,11 +983,18 @@ class Renderer:
                 x, y, width, height, color, radius, border_color, border_width
             )
             
-    def draw_line(self, x1: int, y1: int, x2: int, y2: int, 
-                 color: Tuple[int, int, int, int], thickness: int = 1) -> None:
-        """Draw a line."""
+    def draw_line(self, x1: int, y1: int, x2: int, y2: int,
+                 color: Tuple[int, int, int, int], thickness: int = 1,
+                 width: int = None) -> None:
+        """Draw a line.
+
+        Args:
+            thickness: Line thickness in pixels (default 1)
+            width: Alias for thickness (for compatibility)
+        """
         if self.backend:
-            self.backend.draw_line(x1, y1, x2, y2, color, thickness)
+            line_width = width if width is not None else thickness
+            self.backend.draw_line(x1, y1, x2, y2, color, line_width)
             
     def draw_text(self, x: int, y: int, text: str, font_size: int = 16,
                  color: Tuple[int, int, int, int] = (255, 255, 255, 255),
@@ -986,13 +1011,13 @@ class Renderer:
             )
         return (0, 0)
         
-    def draw_circle(self, x: int, y: int, radius: int, 
+    def draw_circle(self, x: int, y: int, radius: int,
                    color: Tuple[int, int, int, int],
                    border_color: Optional[Tuple[int, int, int, int]] = None,
-                   border_width: int = 0) -> None:
-        """Draw a filled circle."""
+                   border_width: int = 0, filled: bool = True) -> None:
+        """Draw a circle."""
         if self.backend:
-            self.backend.draw_circle(x, y, radius, color, border_color, border_width)
+            self.backend.draw_circle(x, y, radius, color, border_color, border_width, filled)
             
     def draw_image(self, x: int, y: int, image_path: str, 
                   width: Optional[int] = None, height: Optional[int] = None) -> None:

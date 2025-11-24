@@ -14,16 +14,21 @@ import sys
 from pathlib import Path
 from typing import List, Dict, Tuple, Any, Optional, Union, Set
 
-# Add the parent directory to sys.path for absolute imports
-if __name__ == "__main__" or not __package__:
-    project_root = Path(__file__).parent.parent.parent.parent
-    sys.path.insert(0, str(project_root))
-    from MetaMindIQTrain.core.theme_manager import ThemeManager
-else:
-    # Use relative imports when imported as a module
-    from ....core.theme_manager import ThemeManager
+# Ensure project root is in path
+_project_root = Path(__file__).resolve().parent.parent.parent.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
 
-from .expand_vision_model import ExpandVisionModel
+# Import theme manager - try multiple approaches
+try:
+    from core.theme_manager import ThemeManager
+except ImportError:
+    try:
+        from core.theme import Theme as ThemeManager
+    except ImportError:
+        ThemeManager = None
+
+from modules.evolve.expand_vision.expand_vision_model import ExpandVisionModel
 
 class ExpandVisionView:
     """View component for ExpandVision module - handles UI representation."""
@@ -332,5 +337,191 @@ class ExpandVisionView:
                 }
             }
             answer_container["children"].append(answer_btn)
-        
-        return answer_container 
+
+        return answer_container
+
+    def render_to_renderer(self, renderer, model):
+        """Render the view using the renderer abstraction.
+
+        This method uses the renderer's drawing API instead of pygame directly,
+        allowing for headless rendering and different backend support.
+
+        Args:
+            renderer: The renderer instance with drawing methods
+            model: The model containing game state
+        """
+        # Get theme colors
+        bg_color = (15, 18, 28)
+        card_bg = (22, 26, 38)
+        text_color = (220, 225, 235)
+        primary_color = (80, 120, 200)
+        success_color = (70, 200, 120)
+        error_color = (230, 70, 80)
+
+        if ThemeManager:
+            bg_color = ThemeManager.get_color("bg_color")
+            card_bg = ThemeManager.get_color("card_bg")
+            text_color = ThemeManager.get_color("text_color")
+            primary_color = ThemeManager.get_color("primary_color")
+            success_color = ThemeManager.get_color("success_color")
+            error_color = ThemeManager.get_color("error_color")
+
+        # Clear with background color
+        renderer.clear((*bg_color, 255))
+
+        # Draw header background
+        header_height = int(self.screen_height * 0.12)
+        renderer.draw_rectangle(0, 0, self.screen_width, header_height, (*card_bg, 255))
+
+        # Draw title
+        renderer.draw_text(
+            self.screen_width // 2, 20,
+            "Expand Vision - Peripheral Training",
+            font_size=24,
+            color=(*text_color, 255),
+            align="center"
+        )
+
+        # Draw score
+        score = model.score if hasattr(model, 'score') else 0
+        renderer.draw_text(
+            self.screen_width - 30, 20,
+            f"Score: {score}",
+            font_size=18,
+            color=(*text_color, 255),
+            align="right"
+        )
+
+        # Draw level
+        level = model.level if hasattr(model, 'level') else 1
+        renderer.draw_text(
+            30, 20,
+            f"Level: {level}",
+            font_size=18,
+            color=(*text_color, 255),
+            align="left"
+        )
+
+        # Get game phase
+        phase = model.phase if hasattr(model, 'phase') else 'waiting'
+
+        # Draw instructions based on phase
+        instruction = ""
+        if phase == 'waiting':
+            instruction = "Click to start - remember the numbers shown!"
+        elif phase == 'display':
+            instruction = "Remember these numbers!"
+        elif phase == 'answer':
+            instruction = "What was the sum of all numbers?"
+        elif phase == 'feedback':
+            correct = model.last_answer_correct if hasattr(model, 'last_answer_correct') else False
+            instruction = "Correct!" if correct else "Incorrect!"
+
+        renderer.draw_text(
+            self.screen_width // 2, header_height + 20,
+            instruction,
+            font_size=16,
+            color=(*text_color, 255),
+            align="center"
+        )
+
+        # Render based on phase
+        if phase == 'display':
+            self._render_numbers(renderer, model, text_color)
+        elif phase == 'answer':
+            self._render_answer_buttons(renderer, model, primary_color, text_color)
+        elif phase == 'feedback':
+            self._render_feedback(renderer, model, success_color, error_color, text_color)
+
+    def _render_numbers(self, renderer, model, text_color):
+        """Render the numbers in a circular pattern.
+
+        Args:
+            renderer: The renderer instance
+            model: The model containing number data
+            text_color: Color for the numbers
+        """
+        numbers = model.current_numbers if hasattr(model, 'current_numbers') else []
+        positions = model.number_positions if hasattr(model, 'number_positions') else []
+
+        for i, (num, pos) in enumerate(zip(numbers, positions)):
+            color = self.number_colors[i % len(self.number_colors)] if self.number_colors else text_color
+            renderer.draw_text(
+                int(pos[0]), int(pos[1]),
+                str(num),
+                font_size=32,
+                color=(*color, 255),
+                align="center"
+            )
+
+        # Draw center focus point
+        renderer.draw_circle(
+            self.center_x, self.center_y, 8,
+            (80, 120, 200, 255)
+        )
+
+    def _render_answer_buttons(self, renderer, model, primary_color, text_color):
+        """Render the answer buttons.
+
+        Args:
+            renderer: The renderer instance
+            model: The model containing answer options
+            primary_color: Button background color
+            text_color: Button text color
+        """
+        for button in self.answer_buttons:
+            rect = button["rect"]
+            renderer.draw_rounded_rectangle(
+                rect[0], rect[1], rect[2], rect[3],
+                (*primary_color, 255),
+                radius=5
+            )
+            renderer.draw_text(
+                rect[0] + rect[2] // 2,
+                rect[1] + rect[3] // 2,
+                str(button["value"]),
+                font_size=18,
+                color=(*text_color, 255),
+                align="center",
+                center_vertically=True
+            )
+
+    def _render_feedback(self, renderer, model, success_color, error_color, text_color):
+        """Render the feedback after answering.
+
+        Args:
+            renderer: The renderer instance
+            model: The model containing feedback data
+            success_color: Color for correct answers
+            error_color: Color for incorrect answers
+            text_color: Text color
+        """
+        correct = model.last_answer_correct if hasattr(model, 'last_answer_correct') else False
+        color = success_color if correct else error_color
+
+        # Draw feedback circle
+        renderer.draw_circle(
+            self.center_x, self.center_y, 60,
+            (*color, 255)
+        )
+
+        # Draw checkmark or X
+        symbol = "✓" if correct else "✗"
+        renderer.draw_text(
+            self.center_x, self.center_y,
+            symbol,
+            font_size=48,
+            color=(*text_color, 255),
+            align="center",
+            center_vertically=True
+        )
+
+        # Draw correct answer if wrong
+        if not correct and hasattr(model, 'correct_sum'):
+            renderer.draw_text(
+                self.center_x, self.center_y + 100,
+                f"Correct answer: {model.correct_sum}",
+                font_size=20,
+                color=(*text_color, 255),
+                align="center"
+            )

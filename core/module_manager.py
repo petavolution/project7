@@ -15,8 +15,23 @@ import json
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Type, Union, Callable
 
-# Import the unified component system
-from MetaMindIQTrain.core.component_system import Component
+# Ensure project root is in path
+_project_root = Path(__file__).resolve().parent.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
+
+# Import the unified component system - try multiple approaches
+try:
+    from core.component_system import Component
+except ImportError:
+    try:
+        from MetaMindIQTrain.core.component_system import Component
+    except ImportError:
+        # Minimal fallback
+        class Component:
+            def __init__(self, id=None): self.id = id
+            def set_property(self, k, v): pass
+            def add_event_handler(self, e, h): pass
 
 logger = logging.getLogger(__name__)
 
@@ -251,7 +266,11 @@ class ModuleRegistry:
                 # Skip __init__.py, base files, and files beginning with underscore
                 if file_path.name.startswith("__") or file_path.name.startswith("_"):
                     continue
-                    
+
+                # Skip directories starting with underscore (e.g., _archive)
+                if any(part.startswith("_") for part in file_path.parts):
+                    continue
+
                 # Skip obvious utilities
                 if "utils" in file_path.name or "helpers" in file_path.name:
                     continue

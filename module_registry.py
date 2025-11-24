@@ -16,50 +16,62 @@ from typing import Dict, List, Any, Optional, Type, Union
 
 logger = logging.getLogger(__name__)
 
-# Add modules directory to sys.path to avoid relative import issues
-modules_dir = str(Path(__file__).parent / 'modules')
+# Ensure project root is in path
+_project_root = Path(__file__).resolve().parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
+
+# Add modules directory to sys.path
+modules_dir = str(_project_root / 'modules')
 if modules_dir not in sys.path:
     sys.path.append(modules_dir)
 
-# Import the base TrainingModule class to configure display settings
-from MetaMindIQTrain.core.training_module import TrainingModule
+# Import the base TrainingModule class - try multiple approaches
+try:
+    from core.training_module import TrainingModule
+except ImportError:
+    try:
+        from MetaMindIQTrain.core.training_module import TrainingModule
+    except ImportError:
+        TrainingModule = None
+        logger.warning("Could not import TrainingModule base class")
 
 # Dictionary of available modules
 # Each module must have at least:
 # - id: Unique identifier
 # - name: Display name
 # - description: Short description
-# - class_path: Import path for the module class
+# - class_path: Import path for the module class (uses modules.evolve structure)
 AVAILABLE_MODULES = [
     {
-        'id': 'test_module',
-        'name': 'Test Module',
-        'description': 'A simple test module for verifying the platform.',
-        'class_path': 'MetaMindIQTrain.modules.test_module.TestTrainingModule',
-        'difficulty': 'Easy',
-        'category': 'General'
+        'id': 'symbol_memory',
+        'name': 'Symbol Memory',
+        'description': 'Memory training with symbol patterns to enhance recall abilities.',
+        'class_path': 'modules.evolve.symbol_memory.symbol_memory_mvc.SymbolMemory',
+        'difficulty': 'Medium',
+        'category': 'Memory'
     },
     {
         'id': 'morph_matrix',
         'name': 'Morph Matrix',
         'description': 'Matrix-based cognitive training module enhancing pattern recognition.',
-        'class_path': 'MetaMindIQTrain.modules.morph_matrix.MorphMatrix',
+        'class_path': 'modules.evolve.morph_matrix.morph_matrix_mvc.MorphMatrix',
         'difficulty': 'Medium',
         'category': 'Pattern Recognition'
-    },
-    {
-        'id': 'symbol_memory',
-        'name': 'Symbol Memory',
-        'description': 'Memory training with symbol patterns to enhance recall abilities.',
-        'class_path': 'MetaMindIQTrain.modules.symbol_memory.SymbolMemory',
-        'difficulty': 'Medium',
-        'category': 'Memory'
     },
     {
         'id': 'expand_vision',
         'name': 'Expand Vision',
         'description': 'Peripheral vision training to enhance visual field awareness.',
-        'class_path': 'MetaMindIQTrain.modules.expand_vision.ExpandVision',
+        'class_path': 'modules.evolve.expand_vision.expand_vision_mvc.ExpandVision',
+        'difficulty': 'Medium',
+        'category': 'Visual Attention'
+    },
+    {
+        'id': 'expand_vision_grid',
+        'name': 'Expand Vision Grid',
+        'description': 'Grid-based peripheral vision training.',
+        'class_path': 'modules.evolve.expand_vision_grid.expand_vision_grid_mvc.ExpandVisionGrid',
         'difficulty': 'Medium',
         'category': 'Visual Attention'
     },
@@ -67,7 +79,7 @@ AVAILABLE_MODULES = [
         'id': 'neural_flow',
         'name': 'Neural Flow',
         'description': 'Train cognitive processing speed and neural pathway formation.',
-        'class_path': 'MetaMindIQTrain.modules.neural_flow.NeuralFlow',
+        'class_path': 'modules.evolve.neural_flow.neural_flow_mvc.NeuralFlow',
         'difficulty': 'Hard',
         'category': 'Cognitive Flexibility'
     },
@@ -75,7 +87,7 @@ AVAILABLE_MODULES = [
         'id': 'quantum_memory',
         'name': 'Quantum Memory',
         'description': 'Advanced memory training using quantum-inspired mechanics.',
-        'class_path': 'MetaMindIQTrain.modules.quantum_memory.QuantumMemory',
+        'class_path': 'modules.evolve.quantum_memory.quantum_memory_mvc.QuantumMemory',
         'difficulty': 'Hard',
         'category': 'Advanced Memory'
     },
@@ -83,17 +95,17 @@ AVAILABLE_MODULES = [
         'id': 'neural_synthesis',
         'name': 'Neural Synthesis',
         'description': 'Multi-modal training combining visual and auditory patterns.',
-        'class_path': 'MetaMindIQTrain.modules.neural_synthesis.NeuralSynthesis',
+        'class_path': 'modules.evolve.neural_synthesis.neural_synthesis_mvc.NeuralSynthesis',
         'difficulty': 'Medium',
         'category': 'Advanced Cognition'
     },
     {
-        'id': 'music_theory',
-        'name': 'Music Theory',
-        'description': 'Auditory cognitive training using musical patterns, scales, and chords.',
-        'class_path': 'MetaMindIQTrain.modules.music_theory.MusicTheory',
+        'id': 'synesthetic_training',
+        'name': 'Synesthetic Training',
+        'description': 'Cross-sensory association training for enhanced perception.',
+        'class_path': 'modules.evolve.synesthetic_training.synesthetic_training_mvc.SynestheticTraining',
         'difficulty': 'Medium',
-        'category': 'Auditory Cognition'
+        'category': 'Cross-Modal'
     }
 ]
 
@@ -124,11 +136,14 @@ def register_module_type(module_type: str, loader: Any) -> bool:
 
 def configure_modules_display(width: int, height: int):
     """Configure display settings for all modules.
-    
+
     Args:
         width: Screen width
         height: Screen height
     """
+    if TrainingModule is None:
+        logger.error("TrainingModule not available - cannot configure display")
+        return
     TrainingModule.configure_display(width, height)
     logger.info(f"Configured display settings for all modules: {width}x{height}")
 

@@ -1,8 +1,59 @@
+#!/usr/bin/env python3
+"""
+Component System for MetaMindIQTrain
+
+Provides base component classes for UI construction and event handling.
+"""
+
+import logging
+
+logger = logging.getLogger(__name__)
+
+
 class UIComponent:
+    """Base UI component class."""
     pass
 
+
 class Component:
-    pass
+    """Base component class with property and event handling."""
+
+    def __init__(self, component_id=None):
+        self.id = component_id
+        self._properties = {}
+        self._event_handlers = {}
+        self._mounted = False
+        self.parent = None
+
+    def set_property(self, key, value):
+        """Set a component property."""
+        self._properties[key] = value
+        return self
+
+    def get_property(self, key, default=None):
+        """Get a component property."""
+        return self._properties.get(key, default)
+
+    def add_event_handler(self, event_type, handler):
+        """Add an event handler."""
+        if event_type not in self._event_handlers:
+            self._event_handlers[event_type] = []
+        self._event_handlers[event_type].append(handler)
+        return self
+
+    def trigger_event(self, event_type, *args, **kwargs):
+        """Trigger an event and call all registered handlers."""
+        handlers = self._event_handlers.get(event_type, [])
+        result = True
+        for handler in handlers:
+            try:
+                handler_result = handler(*args, **kwargs)
+                if handler_result is False:
+                    result = False
+            except Exception as e:
+                logger.error(f"Error in event handler for {event_type}: {e}")
+                result = False
+        return result
 
 class Container:
     def __init__(self, component_id=None):

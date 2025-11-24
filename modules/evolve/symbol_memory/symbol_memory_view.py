@@ -11,20 +11,70 @@ This module handles the UI representation for the Symbol Memory training module:
 
 import math
 import sys
-import pygame
 from pathlib import Path
 from typing import Dict, List, Tuple, Any, Optional
 
-# Add the parent directory to sys.path for absolute imports when imported directly
-if __name__ == "__main__" or not __package__:
-    project_root = Path(__file__).parent.parent.parent.parent
-    sys.path.insert(0, str(project_root))
-    from MetaMindIQTrain.core.theme_manager import ThemeManager
-    from MetaMindIQTrain.core.config import config
-else:
-    # Use relative imports when imported as a module
-    from ....core.theme_manager import ThemeManager
-    from ....core.config import config
+# Ensure project root is in path
+_project_root = Path(__file__).resolve().parent.parent.parent.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
+
+# Optional pygame import (may not be available in headless mode)
+try:
+    import pygame
+except ImportError:
+    pygame = None
+
+# Import theme manager - try multiple approaches
+try:
+    from core.theme_manager import ThemeManager
+except ImportError:
+    try:
+        from core.theme import Theme as ThemeManager
+    except ImportError:
+        ThemeManager = None
+
+# Import config - try to get full config with themes
+try:
+    from config import SCREEN_WIDTH, SCREEN_HEIGHT, UI_THEME, MODULE_SETTINGS
+    class config:
+        SCREEN_WIDTH = SCREEN_WIDTH
+        SCREEN_HEIGHT = SCREEN_HEIGHT
+        UI_THEME = UI_THEME
+        MODULE_SETTINGS = MODULE_SETTINGS
+except ImportError:
+    # Fallback with default values
+    class config:
+        SCREEN_WIDTH = 1440
+        SCREEN_HEIGHT = 1024
+        UI_THEME = {
+            "colors": {
+                "bg_color": (15, 18, 28),
+                "bg_dark": (10, 12, 20),
+                "bg_light": (30, 35, 50),
+                "card_bg": (22, 26, 38),
+                "card_hover": (35, 42, 60),
+                "text_color": (220, 225, 235),
+                "border_color": (60, 70, 90),
+                "primary_color": (80, 120, 200),
+                "secondary_color": (100, 160, 255),
+                "success_color": (70, 200, 120),
+                "error_color": (230, 70, 80),
+            },
+            "layouts": {
+                "symbol_memory": {
+                    "grid_margin": 5,
+                    "grid_padding": 2,
+                    "cell_margin": 1,
+                }
+            }
+        }
+        MODULE_SETTINGS = {
+            "symbol_memory": {
+                "visual_scale": 1.0,
+                "preserve_font_size": True,
+            }
+        }
 
 
 class SymbolMemoryView:
@@ -658,4 +708,260 @@ class SymbolMemoryView:
             rect[0] + rect[2]/2,
             rect[1] + rect[3]/2
         ))
-        renderer.screen.blit(text_surf, text_rect) 
+        renderer.screen.blit(text_surf, text_rect)
+
+    def render_to_renderer(self, renderer, model):
+        """Render the view using the renderer abstraction.
+
+        This method uses the renderer's drawing API instead of pygame directly,
+        allowing for headless rendering and different backend support.
+
+        Args:
+            renderer: The renderer instance with drawing methods
+            model: The model containing game state
+        """
+        # Get theme colors
+        theme = config.UI_THEME
+        colors = theme["colors"]
+
+        # Clear with background color
+        bg_color = colors.get("bg_color", (15, 18, 28))
+        renderer.clear((*bg_color, 255))
+
+        # Draw header background
+        header_height = int(self.screen_height * 0.12)
+        header_color = colors.get("card_bg", (22, 26, 38))
+        renderer.draw_rectangle(0, 0, self.screen_width, header_height, (*header_color, 255))
+
+        # Draw title
+        text_color = colors.get("text_color", (220, 225, 235))
+        renderer.draw_text(
+            self.screen_width // 2, 20,
+            "Symbol Memory - Recall Challenge",
+            font_size=24,
+            color=(*text_color, 255),
+            align="center"
+        )
+
+        # Draw score
+        score = model.score if hasattr(model, 'score') else 0
+        renderer.draw_text(
+            self.screen_width - 30, 20,
+            f"Score: {score}",
+            font_size=18,
+            color=(*text_color, 255),
+            align="right"
+        )
+
+        # Draw level
+        level = model.level if hasattr(model, 'level') else 1
+        renderer.draw_text(
+            30, 20,
+            f"Level: {level}",
+            font_size=18,
+            color=(*text_color, 255),
+            align="left"
+        )
+
+        # Draw phase message
+        message = model.message if hasattr(model, 'message') else ""
+        if message:
+            renderer.draw_text(
+                self.screen_width // 2, header_height + 20,
+                message,
+                font_size=18,
+                color=(*text_color, 255),
+                align="center"
+            )
+
+        # Recalculate layout if needed
+        if self.grid_rect is None:
+            self._calculate_simple_layout()
+
+        # Draw grid background
+        if self.grid_rect:
+            grid_bg = colors.get("bg_dark", (10, 12, 20))
+            renderer.draw_rounded_rectangle(
+                self.grid_rect[0], self.grid_rect[1],
+                self.grid_rect[2], self.grid_rect[3],
+                (*grid_bg, 255),
+                radius=10
+            )
+
+            # Render grid cells
+            self._render_grid_cells(renderer, model, colors)
+
+        # Render buttons based on phase
+        self._render_buttons(renderer, model, colors)
+
+    def _calculate_simple_layout(self):
+        """Calculate a simple layout without using full theme settings."""
+        grid_size = self.model.current_grid_size if hasattr(self.model, 'current_grid_size') else 3
+
+        # Content area
+        content_height = int(self.screen_height * 0.7)
+        content_y = int(self.screen_height * 0.15)
+
+        # Grid dimensions
+        max_grid_size = min(self.screen_width, content_height) - 100
+        self.cell_size = int(max_grid_size / grid_size * 0.85)
+        grid_width = grid_size * self.cell_size + 20
+        grid_height = grid_width
+
+        grid_x = (self.screen_width - grid_width) // 2
+        grid_y = content_y + (content_height - grid_height) // 2
+
+        self.grid_rect = (grid_x, grid_y, grid_width, grid_height)
+
+        # Button positions
+        footer_y = int(self.screen_height * 0.85)
+        self.button_width = int(self.screen_width * 0.15)
+        self.button_height = int(self.screen_height * 0.075)
+        self.button_margin = int(self.screen_width * 0.05)
+
+        yes_x = self.screen_width // 2 - self.button_width - self.button_margin // 2
+        no_x = self.screen_width // 2 + self.button_margin // 2
+        buttons_y = footer_y
+
+        self.button_rects = {
+            "yes": (yes_x, buttons_y, self.button_width, self.button_height),
+            "no": (no_x, buttons_y, self.button_width, self.button_height),
+            "continue": ((self.screen_width - self.button_width) // 2, buttons_y, self.button_width, self.button_height)
+        }
+
+    def _render_grid_cells(self, renderer, model, colors):
+        """Render the grid cells using the renderer.
+
+        Args:
+            renderer: The renderer instance
+            model: The model containing grid state
+            colors: Theme colors dictionary
+        """
+        # Get pattern based on phase
+        pattern = None
+        show_symbols = False
+
+        if hasattr(model, 'phase'):
+            if model.phase == model.PHASE_MEMORIZE:
+                pattern = model.original_pattern
+                show_symbols = True
+            elif model.phase in [model.PHASE_COMPARE, model.PHASE_ANSWER, model.PHASE_FEEDBACK]:
+                pattern = model.modified_pattern
+                show_symbols = True
+            else:
+                pattern = model.original_pattern
+                show_symbols = False
+
+        if not pattern:
+            return
+
+        grid = pattern.get("grid", [])
+        grid_size = pattern.get("size", 3)
+
+        grid_x, grid_y, grid_width, grid_height = self.grid_rect
+        padding = 10
+        cell_gap = 5
+        cell_size = (grid_width - 2 * padding - (grid_size - 1) * cell_gap) // grid_size
+
+        cell_bg = colors.get("bg_light", (30, 35, 50))
+        text_color = colors.get("text_color", (220, 225, 235))
+
+        for row in range(grid_size):
+            for col in range(grid_size):
+                cell_x = grid_x + padding + col * (cell_size + cell_gap)
+                cell_y = grid_y + padding + row * (cell_size + cell_gap)
+
+                # Draw cell background
+                renderer.draw_rounded_rectangle(
+                    cell_x, cell_y, cell_size, cell_size,
+                    (*cell_bg, 255),
+                    radius=5
+                )
+
+                # Draw symbol if visible
+                if show_symbols and row < len(grid) and col < len(grid[row]):
+                    symbol = grid[row][col]
+                    if symbol:
+                        # Get symbol color if available
+                        symbol_color = text_color
+                        if hasattr(model, 'get_symbol_color'):
+                            symbol_color = model.get_symbol_color(symbol)
+
+                        renderer.draw_text(
+                            cell_x + cell_size // 2,
+                            cell_y + cell_size // 2,
+                            symbol,
+                            font_size=int(cell_size * 0.6),
+                            color=(*symbol_color, 255),
+                            align="center",
+                            center_vertically=True
+                        )
+
+    def _render_buttons(self, renderer, model, colors):
+        """Render the action buttons using the renderer.
+
+        Args:
+            renderer: The renderer instance
+            model: The model containing game state
+            colors: Theme colors dictionary
+        """
+        if not hasattr(model, 'phase'):
+            return
+
+        primary_color = colors.get("primary_color", (80, 120, 200))
+        secondary_color = colors.get("secondary_color", (100, 160, 255))
+        text_color = colors.get("text_color", (220, 225, 235))
+
+        if model.phase == model.PHASE_ANSWER:
+            # Draw Yes button
+            yes_rect = self.button_rects.get("yes", (0, 0, 0, 0))
+            renderer.draw_rounded_rectangle(
+                yes_rect[0], yes_rect[1], yes_rect[2], yes_rect[3],
+                (*primary_color, 255),
+                radius=5
+            )
+            renderer.draw_text(
+                yes_rect[0] + yes_rect[2] // 2,
+                yes_rect[1] + yes_rect[3] // 2,
+                "Yes",
+                font_size=20,
+                color=(*text_color, 255),
+                align="center",
+                center_vertically=True
+            )
+
+            # Draw No button
+            no_rect = self.button_rects.get("no", (0, 0, 0, 0))
+            renderer.draw_rounded_rectangle(
+                no_rect[0], no_rect[1], no_rect[2], no_rect[3],
+                (*secondary_color, 255),
+                radius=5
+            )
+            renderer.draw_text(
+                no_rect[0] + no_rect[2] // 2,
+                no_rect[1] + no_rect[3] // 2,
+                "No",
+                font_size=20,
+                color=(*text_color, 255),
+                align="center",
+                center_vertically=True
+            )
+
+        elif model.phase == model.PHASE_FEEDBACK:
+            # Draw Continue button
+            continue_rect = self.button_rects.get("continue", (0, 0, 0, 0))
+            renderer.draw_rounded_rectangle(
+                continue_rect[0], continue_rect[1],
+                continue_rect[2], continue_rect[3],
+                (*primary_color, 255),
+                radius=5
+            )
+            renderer.draw_text(
+                continue_rect[0] + continue_rect[2] // 2,
+                continue_rect[1] + continue_rect[3] // 2,
+                "Continue",
+                font_size=20,
+                color=(*text_color, 255),
+                align="center",
+                center_vertically=True
+            )

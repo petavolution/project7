@@ -15,37 +15,58 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Tuple, Any, Optional
 
-# Add the parent directory to sys.path for absolute imports when imported directly
-if __name__ == "__main__" or not __package__:
-    project_root = Path(__file__).parent.parent.parent.parent
-    sys.path.insert(0, str(project_root))
-    from .neural_synthesis_model import NeuralSynthesisModel
-    from .neural_synthesis_view import NeuralSynthesisView
-    from .neural_synthesis_controller import NeuralSynthesisController
-else:
-    # Use relative imports when imported as a module
-    from .neural_synthesis_model import NeuralSynthesisModel
-    from .neural_synthesis_view import NeuralSynthesisView
-    from .neural_synthesis_controller import NeuralSynthesisController
+# Ensure project root is in path for imports
+_project_root = Path(__file__).resolve().parent.parent.parent.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
+
+# Import TrainingModule - try multiple approaches for robustness
+try:
+    from core.training_module import TrainingModule
+except ImportError:
+    try:
+        from MetaMindIQTrain.core.training_module import TrainingModule
+    except ImportError:
+        # Minimal fallback
+        class TrainingModule:
+            SCREEN_WIDTH = 1024
+            SCREEN_HEIGHT = 768
+            def __init__(self): pass
+
+# Import local MVC components
+from modules.evolve.neural_synthesis.neural_synthesis_model import NeuralSynthesisModel
+from modules.evolve.neural_synthesis.neural_synthesis_view import NeuralSynthesisView
+from modules.evolve.neural_synthesis.neural_synthesis_controller import NeuralSynthesisController
 
 
-class NeuralSynthesis:
+class NeuralSynthesis(TrainingModule):
     """Main entry point for the Neural Synthesis training module."""
-    
-    def __init__(self, screen_width=800, screen_height=600):
+
+    def __init__(self, difficulty=1):
         """Initialize the Neural Synthesis module.
-        
+
         Args:
-            screen_width: Width of the game screen
-            screen_height: Height of the game screen
+            difficulty: Initial difficulty level
         """
+        super().__init__()
+
+        # Module metadata
+        self.name = "neural_synthesis"
+        self.display_name = "Neural Synthesis"
+        self.description = "Multi-modal cognitive training for cross-modal integration"
+        self.category = "Evolve"
+
+        # Screen dimensions from parent class
+        self.screen_width = self.__class__.SCREEN_WIDTH
+        self.screen_height = self.__class__.SCREEN_HEIGHT
+
         # Initialize MVC components
-        self.model = NeuralSynthesisModel(screen_width, screen_height)
+        self.model = NeuralSynthesisModel(self.screen_width, self.screen_height)
         self.view = NeuralSynthesisView(self.model)
         self.controller = NeuralSynthesisController(self.model, self.view)
-        
+
         # Set initial dimensions
-        self.view.set_dimensions(screen_width, screen_height)
+        self.view.set_dimensions(self.screen_width, self.screen_height)
     
     def handle_click(self, pos):
         """Process a mouse click at the given position.
@@ -110,8 +131,16 @@ class NeuralSynthesis:
     
     def render(self, renderer):
         """Render the module using the provided renderer.
-        
+
         Args:
             renderer: Renderer instance
         """
-        self.view.render(renderer) 
+        # Update view dimensions
+        self.view.set_dimensions(self.screen_width, self.screen_height)
+
+        # Render using the view's renderer abstraction
+        if hasattr(self.view, 'render_to_renderer'):
+            self.view.render_to_renderer(renderer, self.model)
+        else:
+            # Fallback to base class render
+            super().render(renderer) 

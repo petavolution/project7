@@ -14,14 +14,19 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Tuple, Any, Optional
 
-# Add the parent directory to sys.path for absolute imports when imported directly
-if __name__ == "__main__" or not __package__:
-    project_root = Path(__file__).parent.parent.parent.parent
-    sys.path.insert(0, str(project_root))
-    from MetaMindIQTrain.core.theme_manager import ThemeManager
-else:
-    # Use relative imports when imported as a module
-    from ....core.theme_manager import ThemeManager
+# Ensure project root is in path
+_project_root = Path(__file__).resolve().parent.parent.parent.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
+
+# Import theme manager - try multiple approaches
+try:
+    from core.theme_manager import ThemeManager
+except ImportError:
+    try:
+        from core.theme import Theme as ThemeManager
+    except ImportError:
+        ThemeManager = None
 
 
 class MorphMatrixView:
@@ -361,5 +366,197 @@ class MorphMatrixView:
                 }
                 
                 cells.append(cell)
-        
-        return cells 
+
+        return cells
+
+    def render_to_renderer(self, renderer, model):
+        """Render the view using the renderer abstraction.
+
+        This method uses the renderer's drawing API instead of pygame directly,
+        allowing for headless rendering and different backend support.
+
+        Args:
+            renderer: The renderer instance with drawing methods
+            model: The model containing game state
+        """
+        # Get theme colors
+        bg_color = (15, 18, 28)
+        card_bg = (22, 26, 38)
+        text_color = (220, 225, 235)
+        primary_color = (80, 120, 200)
+        accent_color = (50, 255, 50)
+        cell_off_color = (35, 42, 60)
+        border_color = (60, 70, 90)
+        success_color = (70, 200, 120)
+        error_color = (230, 70, 80)
+
+        if ThemeManager:
+            bg_color = ThemeManager.get_color("bg_color")
+            card_bg = ThemeManager.get_color("card_bg")
+            text_color = ThemeManager.get_color("text_color")
+            primary_color = ThemeManager.get_color("primary_color")
+            accent_color = ThemeManager.get_color("accent_color")
+            border_color = ThemeManager.get_color("border_color")
+            success_color = ThemeManager.get_color("success_color")
+            error_color = ThemeManager.get_color("error_color")
+
+        # Clear with background color
+        renderer.clear((*bg_color, 255))
+
+        # Draw header background
+        header_height = int(self.screen_height * 0.12)
+        renderer.draw_rectangle(0, 0, self.screen_width, header_height, (*card_bg, 255))
+
+        # Draw title
+        renderer.draw_text(
+            self.screen_width // 2, 20,
+            "MorphMatrix - Pattern Recognition",
+            font_size=24,
+            color=(*text_color, 255),
+            align="center"
+        )
+
+        # Draw score
+        score = model.score if hasattr(model, 'score') else 0
+        renderer.draw_text(
+            self.screen_width - 30, 20,
+            f"Score: {score}",
+            font_size=18,
+            color=(*text_color, 255),
+            align="right"
+        )
+
+        # Draw level
+        level = model.level if hasattr(model, 'level') else 1
+        renderer.draw_text(
+            30, 20,
+            f"Level: {level}",
+            font_size=18,
+            color=(*text_color, 255),
+            align="left"
+        )
+
+        # Draw instructions
+        instruction = "Select patterns that are rotations of the original (top-left)"
+        if hasattr(model, 'game_state') and model.game_state == 'feedback':
+            if hasattr(model, 'answered') and model.answered:
+                instruction = "Correct!" if model.correct_answer else "Incorrect!"
+        renderer.draw_text(
+            self.screen_width // 2, header_height + 20,
+            instruction,
+            font_size=16,
+            color=(*text_color, 255),
+            align="center"
+        )
+
+        # Calculate pattern layout
+        if not self.pattern_rects:
+            self.calculate_layout()
+
+        # Render patterns
+        self._render_patterns(renderer, model, accent_color, cell_off_color, border_color,
+                             primary_color, success_color, error_color, text_color)
+
+        # Render submit button
+        self._render_submit_button(renderer, model, primary_color, text_color)
+
+    def _render_patterns(self, renderer, model, accent_color, cell_off_color, border_color,
+                        primary_color, success_color, error_color, text_color):
+        """Render the matrix patterns.
+
+        Args:
+            renderer: The renderer instance
+            model: The model containing pattern data
+            Various color parameters for theming
+        """
+        if not hasattr(model, 'patterns') or not model.patterns:
+            return
+
+        matrix_size = model.matrix_size if hasattr(model, 'matrix_size') else 3
+        patterns = model.patterns
+        selected = model.selected_patterns if hasattr(model, 'selected_patterns') else set()
+        correct_indices = model.correct_indices if hasattr(model, 'correct_indices') else set()
+        game_state = model.game_state if hasattr(model, 'game_state') else 'playing'
+
+        for i, (pattern_rect, matrix) in enumerate(zip(self.pattern_rects, patterns)):
+            px, py, pw, ph = pattern_rect
+
+            # Determine border color based on selection and game state
+            border = border_color
+            if game_state == 'feedback':
+                if i in correct_indices:
+                    border = success_color if i in selected else error_color
+                elif i in selected:
+                    border = error_color
+            elif i in selected:
+                border = primary_color
+
+            # Draw pattern background
+            renderer.draw_rounded_rectangle(px, py, pw, ph, (*border, 255), radius=5)
+            inner_margin = 3
+            renderer.draw_rounded_rectangle(
+                px + inner_margin, py + inner_margin,
+                pw - 2 * inner_margin, ph - 2 * inner_margin,
+                (25, 30, 45, 255), radius=3
+            )
+
+            # Draw cells
+            cell_size = min((pw - 20) // matrix_size, (ph - 20) // matrix_size)
+            start_x = px + (pw - matrix_size * cell_size) // 2
+            start_y = py + (ph - matrix_size * cell_size) // 2
+
+            for row in range(matrix_size):
+                for col in range(matrix_size):
+                    cell_x = start_x + col * cell_size
+                    cell_y = start_y + row * cell_size
+                    filled = matrix[row][col] == 1 if row < len(matrix) and col < len(matrix[row]) else False
+
+                    cell_color = accent_color if filled else cell_off_color
+                    renderer.draw_rectangle(
+                        cell_x + 1, cell_y + 1,
+                        cell_size - 2, cell_size - 2,
+                        (*cell_color, 255)
+                    )
+
+            # Label for original pattern
+            if i == 0:
+                renderer.draw_text(
+                    px + pw // 2, py - 15,
+                    "Original",
+                    font_size=14,
+                    color=(*text_color, 255),
+                    align="center"
+                )
+
+    def _render_submit_button(self, renderer, model, primary_color, text_color):
+        """Render the submit/next button.
+
+        Args:
+            renderer: The renderer instance
+            model: The model containing game state
+            primary_color: Button background color
+            text_color: Button text color
+        """
+        game_state = model.game_state if hasattr(model, 'game_state') else 'playing'
+
+        button_width = int(self.screen_width * 0.15)
+        button_height = int(self.screen_height * 0.075)
+        button_x = (self.screen_width - button_width) // 2
+        button_y = int(self.screen_height * 0.88)
+
+        button_text = "Next Round" if game_state == 'feedback' else "Submit"
+
+        renderer.draw_rounded_rectangle(
+            button_x, button_y, button_width, button_height,
+            (*primary_color, 255),
+            radius=5
+        )
+        renderer.draw_text(
+            button_x + button_width // 2,
+            button_y + button_height // 2,
+            button_text,
+            font_size=18,
+            color=(*text_color, 255),
+            align="center",
+            center_vertically=True
+        )

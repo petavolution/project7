@@ -23,41 +23,57 @@ import time
 from pathlib import Path
 from typing import Dict, List, Tuple, Any, Optional
 
-# Add the parent directory to sys.path for absolute imports
-if __name__ == "__main__" or not __package__:
-    project_root = Path(__file__).parent.parent.parent.parent
-    sys.path.insert(0, str(project_root))
-    from MetaMindIQTrain.core.training_module import TrainingModule
-else:
-    # Use relative imports when imported as a module
-    from ....core.training_module import TrainingModule
+# Ensure project root is in path for imports
+_project_root = Path(__file__).resolve().parent.parent.parent.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
 
-from .expand_vision_model import ExpandVisionModel
-from .expand_vision_view import ExpandVisionView
-from .expand_vision_controller import ExpandVisionController
+# Import TrainingModule - try multiple approaches for robustness
+try:
+    from core.training_module import TrainingModule
+except ImportError:
+    try:
+        from MetaMindIQTrain.core.training_module import TrainingModule
+    except ImportError:
+        class TrainingModule:
+            def __init__(self): pass
+
+# Import local MVC components
+from modules.evolve.expand_vision.expand_vision_model import ExpandVisionModel
+from modules.evolve.expand_vision.expand_vision_view import ExpandVisionView
+from modules.evolve.expand_vision.expand_vision_controller import ExpandVisionController
 
 class ExpandVision(TrainingModule):
     """ExpandVision Training Module - Enhances peripheral vision and numerical processing.
-    
+
     This class serves as the main entry point for the ExpandVision training module.
-    It initializes the MVC components, handles the game loop, and provides 
+    It initializes the MVC components, handles the game loop, and provides
     the interface for interaction with the rest of the platform.
     """
-    
-    def __init__(self, screen_width: int, screen_height: int):
+
+    def __init__(self, difficulty=1):
         """Initialize the ExpandVision training module.
-        
+
         Args:
-            screen_width: Width of the screen in pixels
-            screen_height: Height of the screen in pixels
+            difficulty: Initial difficulty level
         """
         super().__init__()
-        
+
+        # Module metadata
+        self.name = "expand_vision"
+        self.display_name = "Expand Vision"
+        self.description = "Peripheral vision training to enhance visual field awareness"
+        self.category = "Visual Attention"
+
+        # Screen dimensions from parent class
+        self.screen_width = self.__class__.SCREEN_WIDTH
+        self.screen_height = self.__class__.SCREEN_HEIGHT
+
         # Initialize MVC components
-        self.model = ExpandVisionModel(screen_width, screen_height)
+        self.model = ExpandVisionModel(self.screen_width, self.screen_height)
         self.view = ExpandVisionView(self.model)
         self.controller = ExpandVisionController(self.model, self.view)
-        
+
         # Game timer
         self.last_update_time = time.time()
     
@@ -123,6 +139,26 @@ class ExpandVision(TrainingModule):
         self.model.reset()
         self.controller.reset()
         self.last_update_time = time.time()
+
+    def render(self, renderer):
+        """Render the module using the provided renderer.
+
+        This method renders the module's UI using the renderer abstraction,
+        delegating to the view for the actual drawing.
+
+        Args:
+            renderer: The renderer instance to use for drawing.
+        """
+        # Update view dimensions
+        if hasattr(self.view, 'update_dimensions'):
+            self.view.update_dimensions(self.model.screen_width, self.model.screen_height)
+
+        # Render using the view
+        if hasattr(self.view, 'render_to_renderer'):
+            self.view.render_to_renderer(renderer, self.model)
+        else:
+            # Fallback - use base class render
+            super().render(renderer)
 
 
 if __name__ == "__main__":
